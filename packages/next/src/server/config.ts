@@ -4,6 +4,8 @@ import { pathToFileURL } from 'url'
 import { Agent as HttpAgent } from 'http'
 import { Agent as HttpsAgent } from 'https'
 import findUp from 'next/dist/compiled/find-up'
+import jitiFactory from 'jiti'
+import { transform } from 'sucrase'
 import chalk from '../lib/chalk'
 import * as Log from '../build/output/log'
 import { CONFIG_FILES, PHASE_DEVELOPMENT_SERVER } from '../shared/lib/constants'
@@ -42,6 +44,21 @@ const experimentalWarning = execOnce(
     console.warn()
   }
 )
+
+let jiti: ReturnType<typeof jitiFactory> | null = null
+function lazyJiti() {
+  return (
+    jiti ??
+    (jiti = jitiFactory(__filename, {
+      interopDefault: true,
+      transform: (opts) => {
+        return transform(opts.source, {
+          transforms: ['typescript', 'imports'],
+        })
+      },
+    }))
+  )
+}
 
 export function setHttpClientAndAgentOptions(config: {
   httpAgentOptions?: NextConfig['httpAgentOptions']
@@ -785,7 +802,7 @@ export default async function loadConfig(
         // https://github.com/nodejs/node/issues/35889
         userConfigModule = require(path)
       } else {
-        userConfigModule = await import(pathToFileURL(path).href)
+        userConfigModule = await lazyJiti()(pathToFileURL(path).href)
       }
       const newEnv: typeof process.env = {} as any
 
@@ -878,7 +895,6 @@ export default async function loadConfig(
     const nonJsPath = findUp.sync(
       [
         `${configBaseName}.jsx`,
-        `${configBaseName}.ts`,
         `${configBaseName}.tsx`,
         `${configBaseName}.json`,
       ],
@@ -888,7 +904,7 @@ export default async function loadConfig(
       throw new Error(
         `Configuring Next.js via '${basename(
           nonJsPath
-        )}' is not supported. Please replace the file with 'next.config.js' or 'next.config.mjs'.`
+        )}' is not supported. Please replace the file with 'next.config.js' or 'next.config.mjs' or 'next.config.ts'.`
       )
     }
   }

@@ -82,7 +82,7 @@ describe('config', () => {
       async () =>
         await loadConfig(
           PHASE_DEVELOPMENT_SERVER,
-          join(__dirname, '_resolvedata', 'typescript-config')
+          join(__dirname, '_resolvedata', 'invalid-config')
         )
     ).rejects.toThrow(
       /Configuring Next.js via .+ is not supported. Please replace the file with 'next.config.js'/
@@ -95,5 +95,15 @@ describe('config', () => {
       join(__dirname, '_resolvedata', 'js-ts-config')
     )
     expect(config.__test__ext).toBe('js')
+  })
+
+  it('Should get the configuration from ts config', async () => {
+    process.env.__NEXT_TEST_MODE = ''
+
+    const config = await loadConfig(
+      PHASE_DEVELOPMENT_SERVER,
+      join(__dirname, '_resolvedata', 'typescript-config')
+    )
+    expect(config.customConfig).toBe(true)
   })
 })
