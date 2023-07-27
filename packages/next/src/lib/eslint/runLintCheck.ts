@@ -11,7 +11,6 @@ import { writeDefaultConfig } from './writeDefaultConfig'
 import { hasEslintConfiguration } from './hasEslintConfiguration'
 import { writeOutputFile } from './writeOutputFile'
 
-import { ESLINT_PROMPT_VALUES } from '../constants'
 import { existsSync, findPagesDir } from '../find-pages-dir'
 import { installDependencies } from '../install-dependencies'
 import { hasNecessaryDependencies } from '../has-necessary-dependencies'
@@ -20,6 +19,7 @@ import * as Log from '../../build/output/log'
 import { EventLintCheckCompleted } from '../../telemetry/events/build'
 import isError, { getProperError } from '../is-error'
 import { getPkgManager } from '../helpers/get-pkg-manager'
+import { getESLintPromptValues } from './getESLintPromptValues'
 
 type Config = {
   plugins: string[]
@@ -57,7 +57,7 @@ async function cliPrompt(): Promise<{ config?: any }> {
       await Promise.resolve(require('next/dist/compiled/cli-select'))
     ).default
     const { value } = await cliSelect({
-      values: ESLINT_PROMPT_VALUES,
+      values: await getESLintPromptValues(),
       valueRenderer: (
         {
           title,
@@ -360,8 +360,8 @@ export async function runLintCheck(
       } else {
         // Ask user what config they would like to start with for first time "next lint" setup
         const { config: selectedConfig } = strict
-          ? ESLINT_PROMPT_VALUES.find(
-              (opt: { title: string }) => opt.title === 'Strict'
+          ? (await getESLintPromptValues(baseDir)).find(
+              (opt) => opt.title === 'Strict'
             )!
           : await cliPrompt()
 
