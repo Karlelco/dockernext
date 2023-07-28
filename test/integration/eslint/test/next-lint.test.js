@@ -110,7 +110,9 @@ describe('Next Lint', () => {
       expect(stdout).toContain(
         'We created the .eslintrc.json file for you and included your selected configuration'
       )
-      expect(eslintrcJson).toMatchObject({ extends: 'next/core-web-vitals' })
+      expect(eslintrcJson).toMatchObject({
+        extends: ['next/core-web-vitals', 'next/typescript'],
+      })
     })
 
     test('shows a successful message when completed', async () => {
