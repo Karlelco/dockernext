@@ -20,9 +20,10 @@ import {
   SUBRESOURCE_INTEGRITY_MANIFEST,
   NEXT_FONT_MANIFEST,
   SERVER_REFERENCE_MANIFEST,
+  PRERENDER_MANIFEST,
 } from '../../../shared/lib/constants'
-import { MiddlewareConfig } from '../../analysis/get-page-static-info'
-import { Telemetry } from '../../../telemetry/storage'
+import type { MiddlewareConfig } from '../../analysis/get-page-static-info'
+import type { Telemetry } from '../../../telemetry/storage'
 import { traceGlobals } from '../../../trace/shared'
 import { EVENT_BUILD_FEATURE_USAGE } from '../../../telemetry/events'
 import { normalizeAppPath } from '../../../shared/lib/router/utils/app-paths'
@@ -125,6 +126,10 @@ function getEntryFiles(
 
   if (NextBuildContext!.hasInstrumentationHook) {
     files.push(`server/edge-${INSTRUMENTATION_HOOK_FILENAME}.js`)
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    files.push(PRERENDER_MANIFEST.replace('json', 'js'))
   }
 
   files.push(
@@ -465,7 +470,7 @@ function getCodeAnalyzer(params: {
           buildInfo.importLocByPath = new Map()
         }
 
-        const importedModule = node.source.value?.toString()!
+        const importedModule = node.source.value?.toString()
         buildInfo.importLocByPath.set(importedModule, {
           sourcePosition: {
             ...node.loc.start,
@@ -582,7 +587,7 @@ function getExtractMetadata(params: {
           const resource = module.resource
           const hasOGImageGeneration =
             resource &&
-            /[\\/]node_modules[\\/]@vercel[\\/]og[\\/]dist[\\/]index\.(edge|node)\.js$|[\\/]next[\\/]dist[\\/](esm[\\/])?server[\\/]web[\\/]spec-extension[\\/]image-response\.js$/.test(
+            /[\\/]node_modules[\\/]@vercel[\\/]og[\\/]dist[\\/]index\.(edge|node)\.js$|[\\/]next[\\/]dist[\\/](esm[\\/])?server[\\/]og[\\/]image-response\.js$/.test(
               resource
             )
 

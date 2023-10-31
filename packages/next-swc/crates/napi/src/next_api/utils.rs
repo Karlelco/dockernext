@@ -7,13 +7,13 @@ use napi::{
     JsFunction, JsObject, JsUnknown, NapiRaw, NapiValue, Status,
 };
 use serde::Serialize;
-use turbo_tasks::{unit, ReadRef, TaskId, TryJoinIterExt, TurboTasks, Vc};
+use turbo_tasks::{ReadRef, TaskId, TryJoinIterExt, TurboTasks, Vc};
 use turbopack_binding::{
     turbo::{tasks_fs::FileContent, tasks_memory::MemoryBackend},
     turbopack::core::{
         diagnostics::{Diagnostic, DiagnosticContextExt, PlainDiagnostic},
         error::PrettyPrintError,
-        issue::{IssueContextExt, PlainIssue, PlainIssueSource, PlainSource},
+        issue::{IssueDescriptionExt, PlainIssue, PlainIssueSource, PlainSource},
         source_pos::SourcePos,
     },
 };
@@ -69,31 +69,23 @@ impl Drop for RootTask {
 
 #[napi]
 pub fn root_task_dispose(
-    #[napi(ts_arg_type = "{ __napiType: \"RootTask\" }")] _root_task: External<RootTask>,
+    #[napi(ts_arg_type = "{ __napiType: \"RootTask\" }")] mut root_task: External<RootTask>,
 ) -> napi::Result<()> {
-    // TODO(alexkirsz) Implement. Not panicking here to avoid crashing the process
-    // when testing.
-    eprintln!("root_task_dispose not yet implemented");
+    if let Some(task) = root_task.task_id.take() {
+        root_task.turbo_tasks.dispose_root_task(task);
+    }
     Ok(())
 }
 
-pub async fn get_issues<T>(source: Vc<T>) -> Result<Vec<ReadRef<PlainIssue>>> {
-    let issues = source
-        .peek_issues_with_path()
-        .await?
-        .strongly_consistent()
-        .await?;
+pub async fn get_issues<T: Send>(source: Vc<T>) -> Result<Vec<ReadRef<PlainIssue>>> {
+    let issues = source.peek_issues_with_path().await?;
     issues.get_plain_issues().await
 }
 
 /// Collect [turbopack::core::diagnostics::Diagnostic] from given source,
 /// returns [turbopack::core::diagnostics::PlainDiagnostic]
-pub async fn get_diagnostics<T>(source: Vc<T>) -> Result<Vec<ReadRef<PlainDiagnostic>>> {
-    let captured_diags = source
-        .peek_diagnostics()
-        .await?
-        .strongly_consistent()
-        .await?;
+pub async fn get_diagnostics<T: Send>(source: Vc<T>) -> Result<Vec<ReadRef<PlainDiagnostic>>> {
+    let captured_diags = source.peek_diagnostics().await?;
 
     captured_diags
         .diagnostics
@@ -107,7 +99,7 @@ pub async fn get_diagnostics<T>(source: Vc<T>) -> Result<Vec<ReadRef<PlainDiagno
 pub struct NapiIssue {
     pub severity: String,
     pub category: String,
-    pub context: String,
+    pub file_path: String,
     pub title: String,
     pub description: String,
     pub detail: String,
@@ -121,7 +113,7 @@ impl From<&PlainIssue> for NapiIssue {
         Self {
             description: issue.description.clone(),
             category: issue.category.clone(),
-            context: issue.context.clone(),
+            file_path: issue.file_path.clone(),
             detail: issue.detail.clone(),
             documentation_link: issue.documentation_link.clone(),
             severity: issue.severity.as_str().to_string(),
@@ -264,9 +256,9 @@ pub fn subscribe<T: 'static + Send + Sync, F: Future<Output = Result<T>> + Send,
             if !matches!(status, Status::Ok) {
                 let error = anyhow!("Error calling JS function: {}", status);
                 eprintln!("{}", error);
-                return Err(error);
+                return Err::<Vc<()>, _>(error);
             }
-            Ok(unit().node)
+            Ok(Default::default())
         })
     });
     Ok(External::new(RootTask {
