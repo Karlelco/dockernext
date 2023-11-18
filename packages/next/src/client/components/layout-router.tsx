@@ -517,6 +517,8 @@ export default function OuterLayoutRouter({
   template,
   notFound,
   notFoundStyles,
+  glue,
+  glueStyles,
   styles,
 }: {
   parallelRouterKey: string
@@ -535,6 +537,8 @@ export default function OuterLayoutRouter({
   hasLoading: boolean
   notFound: React.ReactNode | undefined
   notFoundStyles: React.ReactNode | undefined
+  glue: React.ComponentType<{ children: React.JSX.Element[] }>
+  glueStyles?: React.ReactNode | undefined
   styles?: React.ReactNode
 }) {
   const context = useContext(LayoutRouterContext)
@@ -566,74 +570,80 @@ export default function OuterLayoutRouter({
   // TODO-APP: Add handling of `<Offscreen>` when it's available.
   const preservedSegments: Segment[] = [treeSegment]
 
+  // Allow Glue to be a component
+  const Glue = glue
+
   return (
     <>
       {styles}
-      {preservedSegments.map((preservedSegment) => {
-        const isChildPropSegment = matchSegment(
-          preservedSegment,
-          childPropSegment
-        )
-        const preservedSegmentValue = getSegmentValue(preservedSegment)
-        const cacheKey = createRouterCacheKey(preservedSegment)
+      {glueStyles}
+      <Glue>
+        {preservedSegments.map((preservedSegment) => {
+          const isChildPropSegment = matchSegment(
+            preservedSegment,
+            childPropSegment
+          )
+          const preservedSegmentValue = getSegmentValue(preservedSegment)
+          const cacheKey = createRouterCacheKey(preservedSegment)
 
-        return (
-          /*
-            - Error boundary
-              - Only renders error boundary if error component is provided.
-              - Rendered for each segment to ensure they have their own error state.
-            - Loading boundary
-              - Only renders suspense boundary if loading components is provided.
-              - Rendered for each segment to ensure they have their own loading state.
-              - Passed to the router during rendering to ensure it can be immediately rendered when suspending on a Flight fetch.
-          */
-          <TemplateContext.Provider
-            key={createRouterCacheKey(preservedSegment, true)}
-            value={
-              <ScrollAndFocusHandler segmentPath={segmentPath}>
-                <ErrorBoundary
-                  errorComponent={error}
-                  errorStyles={errorStyles}
-                  errorScripts={errorScripts}
-                >
-                  <LoadingBoundary
-                    hasLoading={hasLoading}
-                    loading={loading}
-                    loadingStyles={loadingStyles}
-                    loadingScripts={loadingScripts}
+          return (
+            /*
+              - Error boundary
+                - Only renders error boundary if error component is provided.
+                - Rendered for each segment to ensure they have their own error state.
+              - Loading boundary
+                - Only renders suspense boundary if loading components is provided.
+                - Rendered for each segment to ensure they have their own loading state.
+                - Passed to the router during rendering to ensure it can be immediately rendered when suspending on a Flight fetch.
+            */
+            <TemplateContext.Provider
+              key={createRouterCacheKey(preservedSegment, true)}
+              value={
+                <ScrollAndFocusHandler segmentPath={segmentPath}>
+                  <ErrorBoundary
+                    errorComponent={error}
+                    errorStyles={errorStyles}
+                    errorScripts={errorScripts}
                   >
-                    <NotFoundBoundary
-                      notFound={notFound}
-                      notFoundStyles={notFoundStyles}
+                    <LoadingBoundary
+                      hasLoading={hasLoading}
+                      loading={loading}
+                      loadingStyles={loadingStyles}
+                      loadingScripts={loadingScripts}
                     >
-                      <RedirectBoundary>
-                        <InnerLayoutRouter
-                          parallelRouterKey={parallelRouterKey}
-                          url={url}
-                          tree={tree}
-                          childNodes={childNodesForParallelRouter!}
-                          initialChildNode={
-                            isChildPropSegment ? initialChildNode : null
-                          }
-                          segmentPath={segmentPath}
-                          cacheKey={cacheKey}
-                          isActive={
-                            currentChildSegmentValue === preservedSegmentValue
-                          }
-                        />
-                      </RedirectBoundary>
-                    </NotFoundBoundary>
-                  </LoadingBoundary>
-                </ErrorBoundary>
-              </ScrollAndFocusHandler>
-            }
-          >
-            {templateStyles}
-            {templateScripts}
-            {template}
-          </TemplateContext.Provider>
-        )
-      })}
+                      <NotFoundBoundary
+                        notFound={notFound}
+                        notFoundStyles={notFoundStyles}
+                      >
+                        <RedirectBoundary>
+                          <InnerLayoutRouter
+                            parallelRouterKey={parallelRouterKey}
+                            url={url}
+                            tree={tree}
+                            childNodes={childNodesForParallelRouter!}
+                            initialChildNode={
+                              isChildPropSegment ? initialChildNode : null
+                            }
+                            segmentPath={segmentPath}
+                            cacheKey={cacheKey}
+                            isActive={
+                              currentChildSegmentValue === preservedSegmentValue
+                            }
+                          />
+                        </RedirectBoundary>
+                      </NotFoundBoundary>
+                    </LoadingBoundary>
+                  </ErrorBoundary>
+                </ScrollAndFocusHandler>
+              }
+            >
+              {templateStyles}
+              {templateScripts}
+              {template}
+            </TemplateContext.Provider>
+          )
+        })}
+      </Glue>
     </>
   )
 }
