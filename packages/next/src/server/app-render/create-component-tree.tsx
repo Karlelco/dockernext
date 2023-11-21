@@ -65,7 +65,14 @@ export async function createComponentTree({
   const { page, layoutOrPagePath, segment, components, parallelRoutes } =
     parseLoaderTree(tree)
 
-  const { layout, template, error, loading, 'not-found': notFound } = components
+  const {
+    layout,
+    template,
+    error,
+    glue,
+    loading,
+    'not-found': notFound,
+  } = components
 
   const injectedCSSWithCurrentLayout = new Set(injectedCSS)
   const injectedJSWithCurrentLayout = new Set(injectedJS)
@@ -80,6 +87,16 @@ export async function createComponentTree({
     injectedJS: injectedJSWithCurrentLayout,
     injectedFontPreloadTags: injectedFontPreloadTagsWithCurrentLayout,
   })
+
+  const [GlueComponent, glueStyles, glueScripts] = glue
+    ? await createComponentStylesAndScripts({
+        ctx,
+        filePath: glue[1],
+        getComponent: glue[0],
+        injectedCSS: injectedCSSWithCurrentLayout,
+        injectedJS: injectedJSWithCurrentLayout,
+      })
+    : [React.Fragment]
 
   const [Template, templateStyles, templateScripts] = template
     ? await createComponentStylesAndScripts({
@@ -370,6 +387,9 @@ export async function createComponentTree({
             templateScripts={templateScripts}
             notFound={notFoundComponent}
             notFoundStyles={notFoundStyles}
+            glue={GlueComponent}
+            glueStyles={glueStyles}
+            glueScripts={glueScripts}
             // TODO: This prop will soon by removed and instead we'll return all
             // the child nodes in the entire tree at the top level of the
             // Flight response.
