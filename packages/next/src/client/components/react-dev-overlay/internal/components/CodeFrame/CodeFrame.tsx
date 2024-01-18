@@ -1,16 +1,18 @@
-import Anser from 'next/dist/compiled/anser'
 import * as React from 'react'
+
+import Anser from 'next/dist/compiled/anser'
 import type { StackFrame } from 'next/dist/compiled/stacktrace-parser'
 import stripAnsi from 'next/dist/compiled/strip-ansi'
+
 import { getFrameSource } from '../../helpers/stack-frame'
 import { useOpenInEditor } from '../../helpers/use-open-in-editor'
 
 export type CodeFrameProps = { stackFrame: StackFrame; codeFrame: string }
 
-export const CodeFrame: React.FC<CodeFrameProps> = function CodeFrame({
+export function CodeFrame({
   stackFrame,
   codeFrame,
-}) {
+}: CodeFrameProps): React.ReactNode {
   // Strip leading spaces out of the code frame:
   const formattedFrame = React.useMemo<string>(() => {
     const lines = codeFrame.split(/\r?\n/g)
@@ -53,12 +55,12 @@ export const CodeFrame: React.FC<CodeFrameProps> = function CodeFrame({
 
   // TODO: make the caret absolute
   return (
-    <div data-nextjs-codeframe>
+    <div data-nextjs-codeframe className="codeframe">
       <div>
         <p
           role="link"
           onClick={open}
-          tabIndex={1}
+          tabIndex={0}
           title="Click to open in your editor"
         >
           <span>
@@ -73,6 +75,7 @@ export const CodeFrame: React.FC<CodeFrameProps> = function CodeFrame({
             strokeLinecap="round"
             strokeLinejoin="round"
           >
+            <title>Open in editor</title>
             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
             <polyline points="15 3 21 3 21 9"></polyline>
             <line x1="10" y1="14" x2="21" y2="3"></line>
