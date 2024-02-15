@@ -54,6 +54,8 @@ import { isAppPageRoute } from '../lib/is-app-page-route'
 import isError from '../lib/is-error'
 import { needsExperimentalReact } from '../lib/needs-experimental-react'
 import { formatManifest } from '../build/manifests/formatter/format-manifest'
+import { validateRevalidate } from '../server/lib/patch-fetch'
+import { TurborepoAccessTraceResult } from '../build/turborepo-access-trace'
 
 function divideSegments(number: number, segments: number): number[] {
   const result = []
@@ -473,6 +475,7 @@ export async function exportAppImpl(
     distDir,
     dev: false,
     basePath: nextConfig.basePath,
+    trailingSlash: nextConfig.trailingSlash,
     canonicalBase: nextConfig.amp?.canonicalBase || '',
     ampSkipValidation: nextConfig.experimental.amp?.skipValidation || false,
     ampOptimizerConfig: nextConfig.experimental.amp?.optimizer || undefined,
@@ -504,13 +507,17 @@ export async function exportAppImpl(
       : {}),
     strictNextHead: !!nextConfig.experimental.strictNextHead,
     deploymentId: nextConfig.experimental.deploymentId,
-    experimental: { ppr: nextConfig.experimental.ppr === true },
+    experimental: {
+      ppr: nextConfig.experimental.ppr === true,
+      missingSuspenseWithCSRBailout:
+        nextConfig.experimental.missingSuspenseWithCSRBailout === true,
+    },
   }
 
   const { serverRuntimeConfig, publicRuntimeConfig } = nextConfig
 
   if (Object.keys(publicRuntimeConfig).length > 0) {
-    ;(renderOpts as any).runtimeConfig = publicRuntimeConfig
+    renderOpts.runtimeConfig = publicRuntimeConfig
   }
 
   // We need this for server rendering the Link component.
@@ -558,9 +565,10 @@ export async function exportAppImpl(
   ]
 
   const filteredPaths = exportPaths.filter(
-    // Remove API routes
     (route) =>
-      exportPathMap[route]._isAppDir || !isAPIRoute(exportPathMap[route].page)
+      exportPathMap[route]._isAppDir ||
+      // Remove API routes
+      !isAPIRoute(exportPathMap[route].page)
   )
 
   if (filteredPaths.length !== exportPaths.length) {
@@ -632,10 +640,7 @@ export async function exportAppImpl(
 
   const progress =
     !options.silent &&
-    createProgress(
-      filteredPaths.length,
-      `${options.statusMessage || 'Exporting'}`
-    )
+    createProgress(filteredPaths.length, options.statusMessage || 'Exporting')
   const pagesDataDir = options.buildExport
     ? outDir
     : join(outDir, '_next/data', buildId)
@@ -691,14 +696,13 @@ export async function exportAppImpl(
           optimizeCss: nextConfig.experimental.optimizeCss,
           disableOptimizedLoading:
             nextConfig.experimental.disableOptimizedLoading,
-          parentSpanId: pageExportSpan.id,
+          parentSpanId: pageExportSpan.getId(),
           httpAgentOptions: nextConfig.httpAgentOptions,
           debugOutput: options.debugOutput,
-          isrMemoryCacheSize: nextConfig.experimental.isrMemoryCacheSize,
+          cacheMaxMemorySize: nextConfig.cacheMaxMemorySize,
           fetchCache: true,
           fetchCacheKeyPrefix: nextConfig.experimental.fetchCacheKeyPrefix,
-          incrementalCacheHandlerPath:
-            nextConfig.experimental.incrementalCacheHandlerPath,
+          cacheHandler: nextConfig.cacheHandler,
           enableExperimentalReact: needsExperimentalReact(nextConfig),
           enabledDirectories,
         })
@@ -718,12 +722,22 @@ export async function exportAppImpl(
     byPath: new Map(),
     byPage: new Map(),
     ssgNotFoundPaths: new Set(),
+    turborepoAccessTraceResults: new Map(),
   }
 
   for (const { result, path } of results) {
     if (!result) continue
 
     const { page } = exportPathMap[path]
+
+    if (result.turborepoAccessTraceResult) {
+      collector.turborepoAccessTraceResults?.set(
+        path,
+        TurborepoAccessTraceResult.fromSerialized(
+          result.turborepoAccessTraceResult
+        )
+      )
+    }
 
     // Capture any render errors.
     if ('error' in result) {
@@ -744,7 +758,7 @@ export async function exportAppImpl(
       // Update path info by path.
       const info = collector.byPath.get(path) ?? {}
       if (typeof result.revalidate !== 'undefined') {
-        info.revalidate = result.revalidate
+        info.revalidate = validateRevalidate(result.revalidate, path)
       }
       if (typeof result.metadata !== 'undefined') {
         info.metadata = result.metadata

@@ -306,6 +306,11 @@ createNextDescribe(
               `window.getComputedStyle(document.querySelector('h1')).color`
             )
           ).toBe('rgb(255, 0, 0)')
+          expect(
+            await browser.eval(
+              `window.getComputedStyle(document.querySelector('h2')).color`
+            )
+          ).toBe('rgb(255, 0, 0)')
         })
       })
 
@@ -319,6 +324,11 @@ createNextDescribe(
           expect(
             await browser.eval(
               `window.getComputedStyle(document.querySelector('h1')).color`
+            )
+          ).toBe('rgb(255, 0, 0)')
+          expect(
+            await browser.eval(
+              `window.getComputedStyle(document.querySelector('h2')).color`
             )
           ).toBe('rgb(255, 0, 0)')
 
@@ -336,6 +346,11 @@ createNextDescribe(
             expect(
               await browser.eval(
                 `window.getComputedStyle(document.querySelector('h1')).color`
+              )
+            ).toBe('rgb(255, 0, 0)')
+            expect(
+              await browser.eval(
+                `window.getComputedStyle(document.querySelector('h2')).color`
               )
             ).toBe('rgb(255, 0, 0)')
           } finally {
@@ -730,13 +745,24 @@ createNextDescribe(
                 ),
               'rgb(255, 0, 0)'
             )
-            await check(
-              () =>
-                browser.eval(
-                  `document.querySelectorAll('link[rel="stylesheet"][href*="/page.css"]').length`
-                ),
-              1
-            )
+
+            if (process.env.TURBOPACK) {
+              await check(
+                () =>
+                  browser.eval(
+                    `document.querySelectorAll('link[rel="stylesheet"][href*="/app_hmr_global_"]').length`
+                  ),
+                1
+              )
+            } else {
+              await check(
+                () =>
+                  browser.eval(
+                    `document.querySelectorAll('link[rel="stylesheet"][href*="/page.css"]').length`
+                  ),
+                1
+              )
+            }
           } finally {
             await next.patchFile(filePath, origContent)
           }

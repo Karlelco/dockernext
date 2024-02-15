@@ -73,7 +73,7 @@ export type CacheNodeSeedData = [
   segment: Segment,
   parallelRoutes: {
     [parallelRouterKey: string]: CacheNodeSeedData | null
-  } | null,
+  },
   node: React.ReactNode | null
 ]
 
@@ -86,9 +86,8 @@ export type FlightDataPath =
       ...FlightSegmentPath[],
       /* segment of the rendered slice: */ Segment,
       /* treePatch */ FlightRouterState,
-      /* subTreeData: */ React.ReactNode | null, // Can be null during prefetch if there's no loading component
-      /* head */ React.ReactNode | null,
-      /* cacheNodeSeedData */ null
+      /* cacheNodeSeedData */ CacheNodeSeedData, // Can be null during prefetch if there's no loading component
+      /* head */ React.ReactNode | null
     ]
 
 /**
@@ -112,6 +111,7 @@ export interface RenderOptsPartial {
   dev?: boolean
   buildId: string
   basePath: string
+  trailingSlash: boolean
   clientReferenceManifest?: ClientReferenceManifest
   supportsDynamicHTML: boolean
   runtime?: ServerRuntime
@@ -143,7 +143,7 @@ export interface RenderOptsPartial {
   }
   params?: ParsedUrlQuery
   isPrefetch?: boolean
-  experimental: { ppr: boolean }
+  experimental: { ppr: boolean; missingSuspenseWithCSRBailout: boolean }
   postponed?: string
 }
 
