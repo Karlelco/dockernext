@@ -1409,9 +1409,7 @@ export default async function build(
 
         await handleEntrypoints({
           entrypoints,
-
           currentEntrypoints,
-
           currentIssues,
           manifestLoader,
           nextConfig: config,
@@ -1422,6 +1420,7 @@ export default async function build(
         for (const [page, route] of currentEntrypoints.page) {
           promises.push(
             handleRouteType({
+              dev,
               page,
               pathname: page,
               route,
@@ -1438,9 +1437,9 @@ export default async function build(
           promises.push(
             handleRouteType({
               page,
+              dev: false,
               pathname: normalizeAppPath(page),
               route,
-
               currentIssues,
               entrypoints: currentEntrypoints,
               manifestLoader,
