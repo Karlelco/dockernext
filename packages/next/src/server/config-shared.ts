@@ -167,6 +167,8 @@ export interface NextJsWebpackConfig {
 }
 
 export interface ExperimentalConfig {
+  navigationRAF?: boolean
+  prerenderEarlyExit?: boolean
   linkNoTouchStart?: boolean
   caseSensitiveRoutes?: boolean
   useDeploymentId?: boolean
@@ -404,6 +406,11 @@ export interface ExperimentalConfig {
    * @default true
    */
   missingSuspenseWithCSRBailout?: boolean
+
+  /**
+   * Enables early import feature for app router modules
+   */
+  useEarlyImport?: boolean
 }
 
 export type ExportPathMap = {
@@ -832,6 +839,8 @@ export const defaultConfig: NextConfig = {
   output: !!process.env.NEXT_PRIVATE_STANDALONE ? 'standalone' : undefined,
   modularizeImports: undefined,
   experimental: {
+    navigationRAF: false,
+    prerenderEarlyExit: false,
     serverMinification: true,
     serverSourceMaps: false,
     linkNoTouchStart: false,
@@ -894,6 +903,7 @@ export const defaultConfig: NextConfig = {
     webpackBuildWorker: undefined,
     missingSuspenseWithCSRBailout: true,
     optimizeServerReact: false,
+    useEarlyImport: false,
   },
 }
 

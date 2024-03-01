@@ -19,6 +19,7 @@ import { defaultConfig } from '../server/config-shared'
 import devalue from 'next/dist/compiled/devalue'
 import findUp from 'next/dist/compiled/find-up'
 import { nanoid } from 'next/dist/compiled/nanoid/index.cjs'
+import { Sema } from 'next/dist/compiled/async-sema'
 import path from 'path'
 import {
   STATIC_STATUS_PAGE_GET_INITIAL_PROPS_ERROR,
@@ -71,6 +72,8 @@ import {
   MIDDLEWARE_REACT_LOADABLE_MANIFEST,
   SERVER_REFERENCE_MANIFEST,
   FUNCTIONS_CONFIG_MANIFEST,
+  UNDERSCORE_NOT_FOUND_ROUTE_ENTRY,
+  UNDERSCORE_NOT_FOUND_ROUTE,
 } from '../shared/lib/constants'
 import { getSortedRoutes, isDynamicRoute } from '../shared/lib/router/utils'
 import type { __ApiPreviewProps } from '../server/api-utils'
@@ -169,7 +172,7 @@ import { isInterceptionRouteAppPath } from '../server/future/helpers/interceptio
 import {
   getTurbopackJsConfig,
   handleEntrypoints,
-  type CurrentIssues,
+  type EntryIssuesMap,
   handleRouteType,
   handlePagesErrorRoute,
   formatIssue,
@@ -177,6 +180,7 @@ import {
 import { TurbopackManifestLoader } from '../server/dev/turbopack/manifest-loader'
 import type { Entrypoints } from '../server/dev/turbopack/types'
 import { buildCustomRoute } from '../lib/build-custom-route'
+import { createProgress } from './progress'
 
 interface ExperimentalBypassForInfo {
   experimentalBypassFor?: RouteHas[]
@@ -1027,7 +1031,7 @@ export default async function build(
 
       const conflictingPublicFiles: string[] = []
       const hasPages404 = mappedPages['/404']?.startsWith(PAGES_DIR_ALIAS)
-      const hasApp404 = !!mappedAppPages?.['/_not-found']
+      const hasApp404 = !!mappedAppPages?.[UNDERSCORE_NOT_FOUND_ROUTE_ENTRY]
       const hasCustomErrorPage =
         mappedPages['/_error'].startsWith(PAGES_DIR_ALIAS)
 
@@ -1388,7 +1392,7 @@ export default async function build(
           page: new Map(),
         }
 
-        const currentIssues: CurrentIssues = new Map()
+        const currentEntryIssues: EntryIssuesMap = new Map()
 
         const manifestLoader = new TurbopackManifestLoader({ buildId, distDir })
 
@@ -1410,22 +1414,41 @@ export default async function build(
         await handleEntrypoints({
           entrypoints,
           currentEntrypoints,
-          currentIssues,
+          currentEntryIssues,
           manifestLoader,
           nextConfig: config,
           rewrites: emptyRewritesObjToBeImplemented,
         })
 
-        const promises = []
-        for (const [page, route] of currentEntrypoints.page) {
+        const progress = createProgress(
+          currentEntrypoints.page.size + currentEntrypoints.app.size + 1,
+          'Building'
+        )
+        const promises: Promise<any>[] = []
+        const sema = new Sema(10)
+        const enqueue = (fn: () => Promise<void>) => {
           promises.push(
+            (async () => {
+              await sema.acquire()
+              try {
+                await fn()
+              } finally {
+                sema.release()
+                progress()
+              }
+            })()
+          )
+        }
+
+        for (const [page, route] of currentEntrypoints.page) {
+          enqueue(() =>
             handleRouteType({
               dev,
               page,
               pathname: page,
               route,
 
-              currentIssues,
+              currentEntryIssues,
               entrypoints: currentEntrypoints,
               manifestLoader,
               rewrites: emptyRewritesObjToBeImplemented,
@@ -1434,13 +1457,13 @@ export default async function build(
         }
 
         for (const [page, route] of currentEntrypoints.app) {
-          promises.push(
+          enqueue(() =>
             handleRouteType({
               page,
               dev: false,
               pathname: normalizeAppPath(page),
               route,
-              currentIssues,
+              currentEntryIssues,
               entrypoints: currentEntrypoints,
               manifestLoader,
               rewrites: emptyRewritesObjToBeImplemented,
@@ -1448,9 +1471,9 @@ export default async function build(
           )
         }
 
-        promises.push(
+        enqueue(() =>
           handlePagesErrorRoute({
-            currentIssues,
+            currentEntryIssues,
             entrypoints: currentEntrypoints,
             manifestLoader,
             rewrites: emptyRewritesObjToBeImplemented,
@@ -1467,8 +1490,8 @@ export default async function build(
           page: string
           message: string
         }[] = []
-        for (const [page, pageIssues] of currentIssues) {
-          for (const issue of pageIssues.values()) {
+        for (const [page, entryIssues] of currentEntryIssues) {
+          for (const issue of entryIssues.values()) {
             errors.push({
               page,
               message: formatIssue(issue),
@@ -1495,8 +1518,12 @@ export default async function build(
       let buildTraceContext: undefined | BuildTraceContext
       let buildTracesPromise: Promise<any> | undefined = undefined
 
-      // webpack build worker is always enabled unless manually disabled
-      const useBuildWorker = config.experimental.webpackBuildWorker !== false
+      // If there's has a custom webpack config and disable the build worker.
+      // Otherwise respect the option if it's set.
+      const useBuildWorker =
+        config.experimental.webpackBuildWorker ||
+        (config.experimental.webpackBuildWorker === undefined &&
+          !config.webpack)
       const runServerAndEdgeInParallel =
         config.experimental.parallelServerCompiles
       const collectServerBuildTracesInParallel =
@@ -2406,7 +2433,9 @@ export default async function build(
         !hasPages500 && !hasNonStaticErrorPage && !customAppGetInitialProps
 
       const combinedPages = [...staticPages, ...ssgPages]
-      const isApp404Static = appStaticPaths.has('/_not-found')
+      const isApp404Static = appStaticPaths.has(
+        UNDERSCORE_NOT_FOUND_ROUTE_ENTRY
+      )
       const hasStaticApp404 = hasApp404 && isApp404Static
 
       // we need to trigger automatic exporting when we have
@@ -2649,7 +2678,7 @@ export default async function build(
 
             routes.forEach((route) => {
               if (isDynamicRoute(page) && route === page) return
-              if (route === '/_not-found') return
+              if (route === UNDERSCORE_NOT_FOUND_ROUTE) return
 
               const {
                 revalidate = appConfig.revalidate ?? false,
