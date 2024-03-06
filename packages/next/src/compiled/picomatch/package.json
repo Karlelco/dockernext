@@ -1,1 +1,8 @@
-{"name":"picomatch","main":"index.js","author":"Jon Schlinkert (https://github.com/jonschlinkert)","license":"MIT"}
+{
+  "name": "picomatch",
+  "main": "index.js",
+  "version": "4.0.1",
+  "author": "Jon Schlinkert (https://github.com/jonschlinkert)",
+  "license": "MIT",
+  "types": "index.d.ts"
+}

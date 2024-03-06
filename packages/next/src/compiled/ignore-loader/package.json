@@ -1,1 +1,5 @@
-{"name":"ignore-loader","main":"index.js"}
+{
+  "name": "ignore-loader",
+  "main": "index.js",
+  "version": "0.1.2"
+}

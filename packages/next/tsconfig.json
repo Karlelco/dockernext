@@ -1,15 +1,5 @@
 {
-  "extends": "../../tsconfig-tsec.json",
-  "compilerOptions": {
-    "strict": true,
-    "module": "esnext",
-    "target": "ES2017",
-    "esModuleInterop": true,
-    "moduleResolution": "node",
-    "jsx": "react-jsx",
-    "stripInternal": true,
-    "verbatimModuleSyntax": true
-  },
+  "extends": "./tsconfig.base.json",
   "exclude": [
     "dist",
     "./*.d.ts",
@@ -20,6 +10,7 @@
     "types/compiled.d.ts",
     "navigation-types/*.d.ts",
     "navigation-types/compat/*.d.ts",
-    "experimental/**/*.d.ts"
+    "experimental/**/*.d.ts",
+    "src/compiled"
   ]
 }

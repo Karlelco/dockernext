@@ -1,1 +1,10 @@
-{"name":"punycode","main":"punycode.js","author":{"name":"Mathias Bynens","url":"https://mathiasbynens.be/"},"license":"MIT"}
+{
+  "name": "punycode",
+  "main": "punycode.js",
+  "version": "2.1.1",
+  "author": {
+    "name": "Mathias Bynens",
+    "url": "https://mathiasbynens.be/"
+  },
+  "license": "MIT"
+}

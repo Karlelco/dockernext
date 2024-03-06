@@ -1,1 +1,10 @@
-{"name":"util","main":"util.js","author":{"name":"Joyent","url":"http://www.joyent.com"},"license":"MIT"}
+{
+  "name": "util",
+  "main": "util.js",
+  "version": "0.12.4",
+  "author": {
+    "name": "Joyent",
+    "url": "http://www.joyent.com"
+  },
+  "license": "MIT"
+}

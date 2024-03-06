@@ -1,1 +1,7 @@
-{"name":"mini-css-extract-plugin","main":"cjs.js","author":"Tobias Koppers @sokra","license":"MIT"}
+{
+  "name": "mini-css-extract-plugin",
+  "main": "cjs.js",
+  "version": "2.4.4",
+  "author": "Tobias Koppers @sokra",
+  "license": "MIT"
+}
