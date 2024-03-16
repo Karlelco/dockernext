@@ -195,6 +195,10 @@ export const styles = css`
     position: absolute;
     left: 10px;
     top: 10px;
+    color: inherit;
+    background: none;
+    border: none;
+    padding: 0;
   }
   [data-nextjs-container-errors-pseudo-html--diff-add] {
     color: var(--color-ansi-green);
@@ -205,5 +209,13 @@ export const styles = css`
   [data-nextjs-container-errors-pseudo-html--tag-error] {
     color: var(--color-ansi-red);
     font-weight: bold;
+  }
+  /* hide but text are still accessible in DOM */
+  [data-nextjs-container-errors-pseudo-html--hint] {
+    display: inline-block;
+    font-size: 0;
+  }
+  [data-nextjs-container-errors-pseudo-html--tag-adjacent='false'] {
+    color: var(--color-accents-3);
   }
 `

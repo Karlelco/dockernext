@@ -198,11 +198,11 @@ export async function loadBindings(
   // and https://github.com/nodejs/node/blob/main/doc/api/process.md#a-note-on-process-io
   if (process.stdout._handle != null) {
     // @ts-ignore
-    process.stdout._handle.setBlocking(true)
+    process.stdout._handle.setBlocking?.(true)
   }
   if (process.stderr._handle != null) {
     // @ts-ignore
-    process.stderr._handle.setBlocking(true)
+    process.stderr._handle.setBlocking?.(true)
   }
 
   pendingBindings = new Promise(async (resolve, _reject) => {
@@ -435,7 +435,6 @@ export interface DefineEnv {
 
 export function createDefineEnv({
   isTurbopack,
-  allowedRevalidateHeaderKeys,
   clientRouterFilters,
   config,
   dev,
@@ -443,7 +442,6 @@ export function createDefineEnv({
   fetchCacheKeyPrefix,
   hasRewrites,
   middlewareMatchers,
-  previewModeId,
 }: Omit<
   DefineEnvPluginOptions,
   'isClient' | 'isNodeOrEdgeCompilation' | 'isEdgeServer' | 'isNodeServer'
@@ -458,7 +456,6 @@ export function createDefineEnv({
     defineEnv[variant] = rustifyEnv(
       getDefineEnv({
         isTurbopack,
-        allowedRevalidateHeaderKeys,
         clientRouterFilters,
         config,
         dev,
@@ -470,7 +467,6 @@ export function createDefineEnv({
         isNodeOrEdgeCompilation: variant === 'nodejs' || variant === 'edge',
         isNodeServer: variant === 'nodejs',
         middlewareMatchers,
-        previewModeId,
       })
     )
   }
@@ -600,12 +596,16 @@ export interface HmrIdentifiers {
   identifiers: string[]
 }
 
-interface TurbopackStackFrame {
-  column: number | null
-  file: string
+/** @see https://github.com/vercel/next.js/blob/415cd74b9a220b6f50da64da68c13043e9b02995/packages/next-swc/crates/napi/src/next_api/project.rs#L824-L833 */
+export interface TurbopackStackFrame {
   isServer: boolean
-  line: number
-  methodName: string | null
+  isInternal?: boolean
+  file: string
+  /** 1-indexed, unlike source map tokens */
+  line?: number
+  /** 1-indexed, unlike source map tokens */
+  column?: number | null
+  methodName?: string
 }
 
 export type UpdateMessage =
