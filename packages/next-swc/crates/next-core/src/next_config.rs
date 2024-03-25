@@ -1,47 +1,27 @@
-use anyhow::{Context, Result};
+use std::collections::HashSet;
+
+use anyhow::{bail, Context, Result};
 use indexmap::IndexMap;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value as JsonValue;
-use turbo_tasks::{trace::TraceRawVcs, Completion, Value, Vc};
-use turbo_tasks_fs::json::parse_json_with_source_context;
+use turbo_tasks::{trace::TraceRawVcs, Vc};
 use turbopack_binding::{
     turbo::{tasks_env::EnvMap, tasks_fs::FileSystemPath},
     turbopack::{
         core::{
-            changed::any_content_changed_of_module,
-            context::{AssetContext, ProcessResult},
-            file_source::FileSource,
-            ident::AssetIdent,
-            issue::{
-                Issue, IssueDescriptionExt, IssueExt, IssueSeverity, OptionStyledString,
-                StyledString,
-            },
-            reference_type::{EntryReferenceSubType, InnerAssets, ReferenceType},
-            resolve::{
-                find_context_file,
-                options::{ImportMap, ImportMapping},
-                FindContextFileResult, ResolveAliasMap,
-            },
-            source::Source,
+            issue::{Issue, IssueSeverity, IssueStage, OptionStyledString, StyledString},
+            resolve::ResolveAliasMap,
         },
         ecmascript_plugin::transform::{
             emotion::EmotionTransformConfig, relay::RelayConfig,
             styled_components::StyledComponentsTransformConfig,
         },
-        node::{
-            debug::should_debug,
-            evaluate::evaluate,
-            execution_context::ExecutionContext,
-            transforms::webpack::{WebpackLoaderItem, WebpackLoaderItems},
-        },
-        turbopack::{
-            evaluate_context::node_evaluate_asset_context,
-            module_options::{LoaderRuleItem, OptionWebpackRules},
-        },
+        node::transforms::webpack::{WebpackLoaderItem, WebpackLoaderItems},
+        turbopack::module_options::{LoaderRuleItem, OptionWebpackRules},
     },
 };
 
-use crate::{embed_js::next_asset, next_shared::transforms::ModularizeImportPackageConfig};
+use crate::next_shared::transforms::ModularizeImportPackageConfig;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -409,19 +389,32 @@ pub enum RemotePatternProtocal {
 pub struct ExperimentalTurboConfig {
     /// This option has been replaced by `rules`.
     pub loaders: Option<JsonValue>,
-    pub rules: Option<IndexMap<String, RuleConfigItem>>,
+    pub rules: Option<IndexMap<String, RuleConfigItemOrShortcut>>,
     pub resolve_alias: Option<IndexMap<String, JsonValue>>,
+    pub resolve_extensions: Option<Vec<String>>,
+    pub use_swc_css: Option<bool>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TraceRawVcs)]
+#[serde(rename_all = "camelCase")]
+pub struct RuleConfigItemOptions {
+    pub loaders: Vec<LoaderItem>,
+    #[serde(default, alias = "as")]
+    pub rename_as: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TraceRawVcs)]
+#[serde(rename_all = "camelCase", untagged)]
+pub enum RuleConfigItemOrShortcut {
+    Loaders(Vec<LoaderItem>),
+    Advanced(RuleConfigItem),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TraceRawVcs)]
 #[serde(rename_all = "camelCase", untagged)]
 pub enum RuleConfigItem {
-    Loaders(Vec<LoaderItem>),
-    Options {
-        loaders: Vec<LoaderItem>,
-        #[serde(default, alias = "as")]
-        rename_as: Option<String>,
-    },
+    Options(RuleConfigItemOptions),
+    Conditional(IndexMap<String, RuleConfigItem>),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TraceRawVcs)]
@@ -480,7 +473,7 @@ pub struct ExperimentalConfig {
     cra_compat: Option<bool>,
     disable_optimized_loading: Option<bool>,
     disable_postcss_preset_env: Option<bool>,
-    esm_externals: Option<serde_json::Value>,
+    esm_externals: Option<EsmExternals>,
     extension_alias: Option<serde_json::Value>,
     external_dir: Option<bool>,
     /// If set to `false`, webpack won't fall back to polyfill Node.js modules
@@ -525,8 +518,6 @@ pub struct ExperimentalConfig {
     /// (doesn't apply to Turbopack).
     webpack_build_worker: Option<bool>,
     worker_threads: Option<bool>,
-
-    use_lightningcss: Option<bool>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TraceRawVcs)]
@@ -544,6 +535,19 @@ pub enum ServerActionsOrLegacyBool {
     /// The legacy way to disable server actions. This is no longer used, server
     /// actions is always enabled.
     LegacyBool(bool),
+}
+
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize, TraceRawVcs)]
+#[serde(rename_all = "kebab-case")]
+pub enum EsmExternalsValue {
+    Loose,
+}
+
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize, TraceRawVcs)]
+#[serde(untagged)]
+pub enum EsmExternals {
+    Loose(EsmExternalsValue),
+    Bool(bool),
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, TraceRawVcs)]
@@ -632,6 +636,9 @@ impl RemoveConsoleConfig {
     }
 }
 
+#[turbo_tasks::value(transparent)]
+pub struct ResolveExtensions(Option<Vec<String>>);
+
 #[turbo_tasks::value_impl]
 impl NextConfig {
     #[turbo_tasks::function]
@@ -697,7 +704,10 @@ impl NextConfig {
     }
 
     #[turbo_tasks::function]
-    pub async fn webpack_rules(self: Vc<Self>) -> Result<Vc<OptionWebpackRules>> {
+    pub async fn webpack_rules(
+        self: Vc<Self>,
+        active_conditions: Vec<String>,
+    ) -> Result<Vc<OptionWebpackRules>> {
         let this = self.await?;
         let Some(turbo_rules) = this
             .experimental
@@ -710,8 +720,9 @@ impl NextConfig {
         if turbo_rules.is_empty() {
             return Ok(Vc::cell(None));
         }
+        let active_conditions = active_conditions.into_iter().collect::<HashSet<_>>();
         let mut rules = IndexMap::new();
-        for (ext, rule) in turbo_rules {
+        for (ext, rule) in turbo_rules.iter() {
             fn transform_loaders(loaders: &[LoaderItem]) -> Vc<WebpackLoaderItems> {
                 Vc::cell(
                     loaders
@@ -726,18 +737,50 @@ impl NextConfig {
                         .collect(),
                 )
             }
-            let rule = match rule {
-                RuleConfigItem::Loaders(loaders) => LoaderRuleItem {
-                    loaders: transform_loaders(loaders),
-                    rename_as: None,
-                },
-                RuleConfigItem::Options { loaders, rename_as } => LoaderRuleItem {
-                    loaders: transform_loaders(loaders),
-                    rename_as: rename_as.clone(),
-                },
-            };
-
-            rules.insert(ext.clone(), rule);
+            fn find_rule<'a>(
+                rule: &'a RuleConfigItem,
+                active_conditions: &HashSet<String>,
+            ) -> Option<&'a RuleConfigItemOptions> {
+                match rule {
+                    RuleConfigItem::Options(rule) => {
+                        return Some(rule);
+                    }
+                    RuleConfigItem::Conditional(map) => {
+                        for (condition, rule) in map.iter() {
+                            if condition == "default" || active_conditions.contains(condition) {
+                                if let Some(rule) = find_rule(rule, active_conditions) {
+                                    return Some(rule);
+                                }
+                            }
+                        }
+                    }
+                }
+                None
+            }
+            match rule {
+                RuleConfigItemOrShortcut::Loaders(loaders) => {
+                    rules.insert(
+                        ext.to_string(),
+                        LoaderRuleItem {
+                            loaders: transform_loaders(loaders),
+                            rename_as: None,
+                        },
+                    );
+                }
+                RuleConfigItemOrShortcut::Advanced(rule) => {
+                    if let Some(RuleConfigItemOptions { loaders, rename_as }) =
+                        find_rule(rule, &active_conditions)
+                    {
+                        rules.insert(
+                            ext.to_string(),
+                            LoaderRuleItem {
+                                loaders: transform_loaders(loaders),
+                                rename_as: rename_as.clone(),
+                            },
+                        );
+                    }
+                }
+            }
         }
         Ok(Vc::cell(Some(Vc::cell(rules))))
     }
@@ -755,6 +798,29 @@ impl NextConfig {
         };
         let alias_map: ResolveAliasMap = resolve_alias.try_into()?;
         Ok(alias_map.cell())
+    }
+
+    #[turbo_tasks::function]
+    pub async fn resolve_extension(self: Vc<Self>) -> Result<Vc<ResolveExtensions>> {
+        let this = self.await?;
+        let Some(resolve_extensions) = this
+            .experimental
+            .turbo
+            .as_ref()
+            .and_then(|t| t.resolve_extensions.as_ref())
+        else {
+            return Ok(Vc::cell(None));
+        };
+        Ok(Vc::cell(Some(resolve_extensions.clone())))
+    }
+
+    #[turbo_tasks::function]
+    pub async fn import_externals(self: Vc<Self>) -> Result<Vc<bool>> {
+        Ok(Vc::cell(match self.await?.experimental.esm_externals {
+            Some(EsmExternals::Bool(b)) => b,
+            Some(EsmExternals::Loose(_)) => bail!("esmExternals = \"loose\" is not supported"),
+            None => true,
+        }))
     }
 
     #[turbo_tasks::function]
@@ -818,173 +884,16 @@ impl NextConfig {
     }
 
     #[turbo_tasks::function]
-    pub async fn use_lightningcss(self: Vc<Self>) -> Result<Vc<bool>> {
+    pub async fn use_swc_css(self: Vc<Self>) -> Result<Vc<bool>> {
         Ok(Vc::cell(
-            self.await?.experimental.use_lightningcss.unwrap_or(false),
+            self.await?
+                .experimental
+                .turbo
+                .as_ref()
+                .and_then(|turbo| turbo.use_swc_css)
+                .unwrap_or(false),
         ))
     }
-}
-
-fn next_configs() -> Vc<Vec<String>> {
-    Vc::cell(
-        ["next.config.mjs", "next.config.js"]
-            .into_iter()
-            .map(ToOwned::to_owned)
-            .collect(),
-    )
-}
-
-#[turbo_tasks::function]
-pub async fn load_next_config(execution_context: Vc<ExecutionContext>) -> Result<Vc<NextConfig>> {
-    Ok(load_config_and_custom_routes(execution_context)
-        .await?
-        .config)
-}
-
-#[turbo_tasks::function]
-pub async fn load_rewrites(execution_context: Vc<ExecutionContext>) -> Result<Vc<Rewrites>> {
-    Ok(load_config_and_custom_routes(execution_context)
-        .await?
-        .custom_routes
-        .await?
-        .rewrites)
-}
-
-#[turbo_tasks::function]
-async fn load_config_and_custom_routes(
-    execution_context: Vc<ExecutionContext>,
-) -> Result<Vc<NextConfigAndCustomRoutes>> {
-    let ExecutionContext { project_path, .. } = *execution_context.await?;
-    let find_config_result = find_context_file(project_path, next_configs());
-    let config_file = match &*find_config_result.await? {
-        FindContextFileResult::Found(config_path, _) => Some(*config_path),
-        FindContextFileResult::NotFound(_) => None,
-    };
-
-    load_next_config_and_custom_routes_internal(execution_context, config_file)
-        .issue_file_path(config_file, "Loading Next.js config")
-        .await
-}
-
-#[turbo_tasks::function]
-async fn load_next_config_and_custom_routes_internal(
-    execution_context: Vc<ExecutionContext>,
-    config_file: Option<Vc<FileSystemPath>>,
-) -> Result<Vc<NextConfigAndCustomRoutes>> {
-    let ExecutionContext {
-        project_path,
-        chunking_context,
-        env,
-    } = *execution_context.await?;
-    let mut import_map = ImportMap::default();
-
-    import_map.insert_exact_alias("next", ImportMapping::External(None).into());
-    import_map.insert_wildcard_alias("next/", ImportMapping::External(None).into());
-    import_map.insert_exact_alias("styled-jsx", ImportMapping::External(None).into());
-    import_map.insert_exact_alias(
-        "styled-jsx/style",
-        ImportMapping::External(Some("styled-jsx/style.js".to_string())).cell(),
-    );
-    import_map.insert_wildcard_alias("styled-jsx/", ImportMapping::External(None).into());
-
-    let context = node_evaluate_asset_context(
-        execution_context,
-        Some(import_map.cell()),
-        None,
-        "next_config".to_string(),
-    );
-    let config_asset = config_file.map(FileSource::new);
-
-    let config_changed = if let Some(config_asset) = config_asset {
-        // This invalidates the execution when anything referenced by the config file
-        // changes
-        match *context
-            .process(
-                Vc::upcast(config_asset),
-                Value::new(ReferenceType::Internal(InnerAssets::empty())),
-            )
-            .await?
-        {
-            ProcessResult::Module(module) => any_content_changed_of_module(module),
-            ProcessResult::Ignore => Completion::immutable(),
-        }
-    } else {
-        Completion::immutable()
-    };
-    let load_next_config_asset = context
-        .process(
-            next_asset("entry/config/next.js".to_string()),
-            Value::new(ReferenceType::Entry(EntryReferenceSubType::Undefined)),
-        )
-        .module();
-    let config_value = evaluate(
-        load_next_config_asset,
-        project_path,
-        env,
-        config_asset.map_or_else(|| AssetIdent::from_path(project_path), |c| c.ident()),
-        context,
-        chunking_context,
-        None,
-        vec![],
-        config_changed,
-        should_debug("next_config"),
-    )
-    .await?;
-
-    let turbopack_binding::turbo::tasks_bytes::stream::SingleValue::Single(val) = config_value
-        .try_into_single()
-        .await
-        .context("Evaluation of Next.js config failed")?
-    else {
-        return Ok(NextConfigAndCustomRoutes {
-            config: NextConfig::default().cell(),
-            custom_routes: CustomRoutes {
-                rewrites: Rewrites::default().cell(),
-            }
-            .cell(),
-        }
-        .cell());
-    };
-    let next_config_and_custom_routes: NextConfigAndCustomRoutesRaw =
-        parse_json_with_source_context(val.to_str()?)?;
-
-    if let Some(turbo) = next_config_and_custom_routes
-        .config
-        .experimental
-        .turbo
-        .as_ref()
-    {
-        if turbo.loaders.is_some() {
-            OutdatedConfigIssue {
-                path: config_file.unwrap_or(project_path),
-                old_name: "experimental.turbo.loaders".to_string(),
-                new_name: "experimental.turbo.rules".to_string(),
-                description: indoc::indoc! { r#"
-                    The new option is similar, but the key should be a glob instead of an extension.
-                    Example: loaders: { ".mdx": ["mdx-loader"] } -> rules: { "*.mdx": ["mdx-loader"] }"# }
-                .to_string(),
-            }
-            .cell()
-            .emit()
-        }
-    }
-
-    Ok(NextConfigAndCustomRoutes {
-        config: next_config_and_custom_routes.config.cell(),
-        custom_routes: CustomRoutes {
-            rewrites: next_config_and_custom_routes.custom_routes.rewrites.cell(),
-        }
-        .cell(),
-    }
-    .cell())
-}
-
-#[turbo_tasks::function]
-pub async fn has_next_config(context: Vc<FileSystemPath>) -> Result<Vc<bool>> {
-    Ok(Vc::cell(!matches!(
-        *find_context_file(context, next_configs()).await?,
-        FindContextFileResult::NotFound(_)
-    )))
 }
 
 /// A subset of ts/jsconfig that next.js implicitly
@@ -1031,8 +940,8 @@ impl Issue for OutdatedConfigIssue {
     }
 
     #[turbo_tasks::function]
-    fn category(&self) -> Vc<String> {
-        Vc::cell("config".to_string())
+    fn stage(&self) -> Vc<IssueStage> {
+        IssueStage::Config.into()
     }
 
     #[turbo_tasks::function]

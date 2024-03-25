@@ -1,37 +1,13 @@
 import type { StackFrame } from 'next/dist/compiled/stacktrace-parser'
-import type { OriginalStackFrameResponse } from '../../server/middleware'
+import type { OriginalStackFrameResponse } from '../../server/shared'
 
-export type OriginalStackFrame =
-  | {
-      error: true
-      reason: string
-      external: false
-      expanded: false
-      sourceStackFrame: StackFrame
-      originalStackFrame: null
-      originalCodeFrame: null
-      sourcePackage?: string
-    }
-  | {
-      error: false
-      reason: null
-      external: false
-      expanded: boolean
-      sourceStackFrame: StackFrame
-      originalStackFrame: StackFrame
-      originalCodeFrame: string | null
-      sourcePackage?: string
-    }
-  | {
-      error: false
-      reason: null
-      external: true
-      expanded: false
-      sourceStackFrame: StackFrame
-      originalStackFrame: null
-      originalCodeFrame: null
-      sourcePackage?: string
-    }
+export interface OriginalStackFrame extends OriginalStackFrameResponse {
+  error: boolean
+  reason: string | null
+  external: boolean
+  expanded: boolean
+  sourceStackFrame: StackFrame
+}
 
 function getOriginalStackFrame(
   source: StackFrame,
@@ -56,9 +32,7 @@ function getOriginalStackFrame(
         `${
           process.env.__NEXT_ROUTER_BASEPATH || ''
         }/__nextjs_original-stack-frame?${params.toString()}`,
-        {
-          signal: controller.signal,
-        }
+        { signal: controller.signal }
       )
       .finally(() => {
         clearTimeout(tm)
@@ -99,6 +73,7 @@ function getOriginalStackFrame(
       sourceStackFrame: source,
       originalStackFrame: null,
       originalCodeFrame: null,
+      sourcePackage: null,
     })
   }
 
@@ -110,6 +85,7 @@ function getOriginalStackFrame(
     sourceStackFrame: source,
     originalStackFrame: null,
     originalCodeFrame: null,
+    sourcePackage: null,
   }))
 }
 
@@ -126,22 +102,36 @@ export function getOriginalStackFrames(
   )
 }
 
+const webpackRegExes = [
+  /^webpack-internal:\/\/\/(\.)?(\((\w+)\))?/,
+  /^(webpack:\/\/\/(\.)?|webpack:\/\/(_N_E\/)?)(\((\w+)\))?/,
+]
+
+function isWebpackBundled(file: string) {
+  return webpackRegExes.some((regEx) => regEx.test(file))
+}
+
+/**
+ * Format the webpack internal id to original file path
+ * webpack-internal:///./src/hello.tsx => ./src/hello.tsx
+ * webpack://_N_E/./src/hello.tsx => ./src/hello.tsx
+ * webpack://./src/hello.tsx => ./src/hello.tsx
+ * webpack:///./src/hello.tsx => ./src/hello.tsx
+ */
 function formatFrameSourceFile(file: string) {
+  for (const regex of webpackRegExes) file = file.replace(regex, '')
   return file
-    .replace(/^webpack-internal:\/\/\/(\.)?/, '')
-    .replace(/^webpack:\/\/\/(\.)?/, '')
 }
 
 export function getFrameSource(frame: StackFrame): string {
+  if (!frame.file) return ''
+
   let str = ''
   try {
-    const u = new URL(frame.file!)
+    const u = new URL(frame.file)
 
     // Strip the origin for same-origin scripts.
-    if (
-      typeof globalThis !== 'undefined' &&
-      globalThis.location?.origin !== u.origin
-    ) {
+    if (globalThis.location?.origin !== u.origin) {
       // URLs can be valid without an `origin`, so long as they have a
       // `protocol`. However, `origin` is preferred.
       if (u.origin === 'null') {
@@ -160,7 +150,7 @@ export function getFrameSource(frame: StackFrame): string {
     str += formatFrameSourceFile(frame.file || '(unknown)') + ' '
   }
 
-  if (frame.lineNumber != null) {
+  if (!isWebpackBundled(frame.file) && frame.lineNumber != null) {
     if (frame.column != null) {
       str += `(${frame.lineNumber}:${frame.column}) `
     } else {

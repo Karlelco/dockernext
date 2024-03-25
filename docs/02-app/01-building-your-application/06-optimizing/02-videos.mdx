@@ -22,7 +22,7 @@ export function Video() {
       <track
         src="/path/to/captions.vtt"
         kind="subtitles"
-        srclang="en"
+        srcLang="en"
         label="English"
       />
       Your browser does not support the video tag.
@@ -39,13 +39,13 @@ export function Video() {
 | `width`       | Sets the width of the video player.                                                                       | `<video width="320" />`              |
 | `height`      | Sets the height of the video player.                                                                      | `<video height="240" />`             |
 | `controls`    | If present, it displays the default set of playback controls.                                             | `<video controls />`                 |
-| `autoplay`    | Automatically starts playing the video when the page loads. Note: Autoplay policies vary across browsers. | `<video autoplay />`                 |
+| `autoPlay`    | Automatically starts playing the video when the page loads. Note: Autoplay policies vary across browsers. | `<video autoPlay />`                 |
 | `loop`        | Loops the video playback.                                                                                 | `<video loop />`                     |
-| `muted`       | Mutes the audio by default. Often used with `autoplay`.                                                   | `<video muted />`                    |
+| `muted`       | Mutes the audio by default. Often used with `autoPlay`.                                                   | `<video muted />`                    |
 | `preload`     | Specifies how the video is preloaded. Values: `none`, `metadata`, `auto`.                                 | `<video preload="none" />`           |
 | `playsInline` | Enables inline playback on iOS devices, often necessary for autoplay to work on iOS Safari.               | `<video playsInline />`              |
 
-> **Good to know**: When using the `autoplay` attribute, it is important to also include the `muted` attribute to ensure the video plays automatically in most browsers and the `playsInline` attribute for compatibility with iOS devices.
+> **Good to know**: When using the `autoPlay` attribute, it is important to also include the `muted` attribute to ensure the video plays automatically in most browsers and the `playsInline` attribute for compatibility with iOS devices.
 
 For a comprehensive list of video attributes, refer to the [MDN documentation](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/video#attributes).
 
@@ -104,7 +104,7 @@ To embed videos from external platforms, you can use Next.js to fetch the video 
 The first step is to create a [Server Component](https://nextjs.org/docs/app/building-your-application/rendering/server-components) that generates the appropriate iframe for embedding the video. This component will fetch the source URL for the video and render the iframe.
 
 ```jsx filename="app/ui/video-component.jsx"
-export const async function VideoComponent (){
+export default async function VideoComponent() {
   const src = await getVideoSrc()
 
   return <iframe src={src} frameborder="0" allowfullscreen />
@@ -229,7 +229,7 @@ async function VideoComponent({ fileName }) {
       <track
         src={captionsUrl}
         kind="subtitles"
-        srclang="en"
+        srcLang="en"
         label="English">
       Your browser does not support the video tag.
     </video>
@@ -257,8 +257,10 @@ Explore these video streaming platforms for integrating video into your Next.js 
 
 ### Cloudinary Integration
 
-- Official [documentation and integration guides](https://support.cloudinary.com/hc/en-us/categories/200477762-Client-Libraries-and-Integration-Guides) for using Cloudinary with Next.js.
-- A [specific guide](https://next.cloudinary.dev/nextjs-13) on integrating Cloudinary with Next.js.
+- Official [documentation and integration guide](https://next.cloudinary.dev/) for using Cloudinary with Next.js.
+- Includes a `<CldVideoPlayer>` component for [drop-in video support](https://next.cloudinary.dev/cldvideoplayer/basic-usage).
+- Find [examples](https://github.com/cloudinary-community/cloudinary-examples/?tab=readme-ov-file#nextjs) of integrating Cloudinary with Next.js including [Adaptive Bitrate Streaming](https://github.com/cloudinary-community/cloudinary-examples/tree/main/examples/nextjs-cldvideoplayer-abr).
+- Other [Cloudinary libraries](https://cloudinary.com/documentation) including a Node.js SDK are also available.
 
 ### Mux Video API
 

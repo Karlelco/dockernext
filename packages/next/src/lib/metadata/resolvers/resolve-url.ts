@@ -1,5 +1,4 @@
 import path from '../../../shared/lib/isomorphic/path'
-import * as Log from '../../../build/output/log'
 import type { MetadataContext } from '../types/resolvers'
 
 function isStringOrURL(icon: any): icon is string | URL {
@@ -12,19 +11,20 @@ function createLocalMetadataBase() {
 
 // For deployment url for metadata routes, prefer to use the deployment url if possible
 // as these routes are unique to the deployments url.
-export function getSocialImageFallbackMetadataBase(
-  metadataBase: URL | null
-): URL | null {
+export function getSocialImageFallbackMetadataBase(metadataBase: URL | null): {
+  fallbackMetadataBase: URL
+  isMetadataBaseMissing: boolean
+} {
   const isMetadataBaseMissing = !metadataBase
   const defaultMetadataBase = createLocalMetadataBase()
   const deploymentUrl =
     process.env.VERCEL_URL && new URL(`https://${process.env.VERCEL_URL}`)
 
-  let fallbackMetadata
+  let fallbackMetadataBase
   if (process.env.NODE_ENV === 'development') {
-    fallbackMetadata = defaultMetadataBase
+    fallbackMetadataBase = defaultMetadataBase
   } else {
-    fallbackMetadata =
+    fallbackMetadataBase =
       process.env.NODE_ENV === 'production' &&
       deploymentUrl &&
       process.env.VERCEL_ENV === 'preview'
@@ -32,14 +32,10 @@ export function getSocialImageFallbackMetadataBase(
         : metadataBase || deploymentUrl || defaultMetadataBase
   }
 
-  if (isMetadataBaseMissing) {
-    Log.warnOnce('')
-    Log.warnOnce(
-      `metadata.metadataBase is not set for resolving social open graph or twitter images, using "${fallbackMetadata.origin}". See https://nextjs.org/docs/app/api-reference/functions/generate-metadata#metadatabase`
-    )
+  return {
+    fallbackMetadataBase,
+    isMetadataBaseMissing,
   }
-
-  return fallbackMetadata
 }
 
 function resolveUrl(url: null | undefined, metadataBase: URL | null): null
@@ -86,21 +82,40 @@ function resolveAbsoluteUrlWithPathname(
   metadataBase: URL | null,
   { trailingSlash, pathname }: MetadataContext
 ): string {
+  // Resolve url with pathname that always starts with `/`
   url = resolveRelativeUrl(url, pathname)
 
-  // Get canonicalUrl without trailing slash
-  let canonicalUrl = ''
+  // Convert string url or URL instance to absolute url string,
+  // if there's case needs to be resolved with metadataBase
+  let resolvedUrl = ''
   const result = metadataBase ? resolveUrl(url, metadataBase) : url
   if (typeof result === 'string') {
-    canonicalUrl = result
+    resolvedUrl = result
   } else {
-    canonicalUrl = result.pathname === '/' ? result.origin : result.href
+    resolvedUrl = result.pathname === '/' ? result.origin : result.href
   }
 
-  // Add trailing slash if it's enabled
-  return trailingSlash && !canonicalUrl.endsWith('/')
-    ? `${canonicalUrl}/`
-    : canonicalUrl
+  // Add trailing slash if it's enabled for urls matches the condition
+  // - Not external, same origin with metadataBase
+  // - Doesn't have query
+  if (trailingSlash && !resolvedUrl.endsWith('/')) {
+    let isRelative = resolvedUrl.startsWith('/')
+    let isExternal = false
+    let hasQuery = resolvedUrl.includes('?')
+    if (!isRelative) {
+      try {
+        const parsedUrl = new URL(resolvedUrl)
+        isExternal =
+          metadataBase != null && parsedUrl.origin !== metadataBase.origin
+      } catch {
+        // If it's not a valid URL, treat it as external
+        isExternal = true
+      }
+      if (!isExternal && !hasQuery) return `${resolvedUrl}/`
+    }
+  }
+
+  return resolvedUrl
 }
 
 export {

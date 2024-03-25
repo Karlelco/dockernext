@@ -5,7 +5,7 @@ description: Create your first page and shared layout with the App Router.
 
 > We recommend reading the [Routing Fundamentals](/docs/app/building-your-application/routing) and [Defining Routes](/docs/app/building-your-application/routing/defining-routes) pages before continuing.
 
-The special files [layout.js](#layouts), [pages.js](#pages), and [template.js](#templates) allow you to create UI for a [route](/docs/app/building-your-application/routing/defining-routes#creating-routes). This page will guide you through how and when to use these special files.
+The special files [layout.js](#layouts), [page.js](#pages), and [template.js](#templates) allow you to create UI for a [route](/docs/app/building-your-application/routing/defining-routes#creating-routes). This page will guide you through how and when to use these special files.
 
 ## Pages
 
@@ -184,10 +184,10 @@ The two layouts would be nested as such:
 />
 
 > **Good to know**:
-
+>
 > - `.js`, `.jsx`, or `.tsx` file extensions can be used for Layouts.
 > - Only the root layout can contain `<html>` and `<body>` tags.
-> - When a `layout.js` and `page.js` file are defined in the same folder. The layout will wrap the page.
+> - When a `layout.js` and `page.js` file are defined in the same folder, the layout will wrap the page.
 > - Layouts are [Server Components](/docs/app/building-your-application/rendering/server-components) by default but can be set to a [Client Component](/docs/app/building-your-application/rendering/client-components).
 > - Layouts can fetch data. View the [Data Fetching](/docs/app/building-your-application/data-fetching) section for more information.
 > - Passing data between a parent layout and its children is not possible. However, you can fetch the same data in a route more than once, and React will [automatically dedupe the requests](/docs/app/building-your-application/caching#request-memoization) without affecting performance.

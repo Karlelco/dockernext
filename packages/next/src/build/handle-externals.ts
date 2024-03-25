@@ -9,7 +9,7 @@ import {
   NODE_ESM_RESOLVE_OPTIONS,
   NODE_RESOLVE_OPTIONS,
 } from './webpack-config'
-import { isWebpackAppLayer, isWebpackServerLayer } from './utils'
+import { isWebpackAppLayer, isWebpackServerOnlyLayer } from './utils'
 import type { NextConfigComplete } from '../server/config-shared'
 import { normalizePathSep } from '../shared/lib/page-path/normalize-path-sep'
 const reactPackagesRegex = /^(react|react-dom|react-server-dom-webpack)($|\/)/
@@ -24,6 +24,15 @@ const externalPattern = new RegExp(
 )
 
 const nodeModulesRegex = /node_modules[/\\].*\.[mc]?js$/
+
+function containsImportInPackages(
+  request: string,
+  packages: string[]
+): boolean {
+  return packages.some(
+    (pkg) => request === pkg || request.startsWith(pkg + '/')
+  )
+}
 
 export function isResourceInPackages(
   resource: string,
@@ -74,7 +83,7 @@ export async function resolveExternal(
     // For package that marked as externals that should be not bundled,
     // we don't resolve them as ESM since it could be resolved as async module,
     // such as `import(external package)` in the bundle, valued as a `Promise`.
-    !optOutBundlingPackages.some((optOut) => request.startsWith(optOut))
+    !containsImportInPackages(request, optOutBundlingPackages)
       ? [true, false]
       : [false]
 
@@ -151,7 +160,6 @@ export function makeExternalHandler({
 }) {
   let resolvedExternalPackageDirs: Map<string, string>
   const looseEsmExternals = config.experimental?.esmExternals === 'loose'
-  const optOutBundlingPackagesSet = new Set(optOutBundlingPackages)
 
   return async function handleExternals(
     context: string,
@@ -225,7 +233,7 @@ export function makeExternalHandler({
     // TODO-APP: bundle route.js with different layer that externals common node_module deps.
     // Make sure @vercel/og is loaded as ESM for Node.js runtime
     if (
-      isWebpackServerLayer(layer) &&
+      isWebpackServerOnlyLayer(layer) &&
       request === 'next/dist/compiled/@vercel/og/index.node.js'
     ) {
       return `module ${request}`
@@ -276,7 +284,7 @@ export function makeExternalHandler({
         : request
 
       // Check if it's opt out bundling package first
-      if (optOutBundlingPackagesSet.has(fullRequest)) {
+      if (containsImportInPackages(fullRequest, optOutBundlingPackages)) {
         return fullRequest
       }
       return resolveNextExternal(fullRequest)
@@ -412,7 +420,7 @@ function resolveBundlingOptOutPackages({
 
   if (nodeModulesRegex.test(resolvedRes)) {
     const isOptOutBundling = optOutBundlingPackageRegex.test(resolvedRes)
-    if (isWebpackServerLayer(layer)) {
+    if (isWebpackServerOnlyLayer(layer)) {
       if (isOptOutBundling) {
         return `${externalType} ${request}` // Externalize if opted out
       }

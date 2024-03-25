@@ -220,10 +220,14 @@ export function createNextApiEsmAliases() {
   return aliasMap
 }
 
-export function createAppRouterApiAliases() {
-  const mapping = {
+export function createAppRouterApiAliases(isServerOnlyLayer: boolean) {
+  const mapping: Record<string, string> = {
     head: 'next/dist/client/components/noop-head',
     dynamic: 'next/dist/api/app-dynamic',
+  }
+
+  if (isServerOnlyLayer) {
+    mapping['navigation'] = 'next/dist/api/navigation.react-server'
   }
 
   const aliasMap: Record<string, string> = {}
@@ -292,12 +296,15 @@ export function createRSCAliases(
       alias[
         'react$'
       ] = `next/dist/compiled/react${bundledReactChannel}/react.react-server`
+      alias[
+        'react-dom$'
+      ] = `next/dist/compiled/react-dom${bundledReactChannel}/react-dom.react-server`
+    } else {
+      // x-ref: https://github.com/facebook/react/pull/25436
+      alias[
+        'react-dom$'
+      ] = `next/dist/compiled/react-dom${bundledReactChannel}/server-rendering-stub`
     }
-    // Use server rendering stub for RSC and SSR
-    // x-ref: https://github.com/facebook/react/pull/25436
-    alias[
-      'react-dom$'
-    ] = `next/dist/compiled/react-dom${bundledReactChannel}/server-rendering-stub`
   }
 
   if (reactProductionProfiling) {
