@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::{bail, Context, Result};
 use indoc::formatdoc;
 use serde::{Deserialize, Serialize};
@@ -58,11 +60,11 @@ impl NextFontLocalReplacer {
     async fn import_map_result(
         &self,
         context: Vc<FileSystemPath>,
-        query: String,
+        query: Arc<String>,
     ) -> Result<Vc<ImportMapResult>> {
         let request_hash = get_request_hash(&query).await?;
         let qstr = qstring::QString::from(query.as_str());
-        let query_vc = Vc::cell(query);
+        let query_vc = Vc::cell((*query).clone());
         let options_vc = font_options_from_query_map(query_vc);
         let font_fallbacks = get_font_fallbacks(context, options_vc, request_hash);
         let properties =
@@ -101,10 +103,13 @@ impl NextFontLocalReplacer {
                 .unwrap_or_else(|| "".to_owned()),
         );
         let js_asset = VirtualSource::new(
-            context.join(format!(
-                "{}.js",
-                get_request_id(options_vc.font_family(), request_hash).await?
-            )),
+            context.join(
+                format!(
+                    "{}.js",
+                    get_request_id(options_vc.font_family(), request_hash).await?
+                )
+                .into(),
+            ),
             AssetContent::file(FileContent::Content(file_content.into()).into()),
         );
 
@@ -115,7 +120,7 @@ impl NextFontLocalReplacer {
 #[turbo_tasks::value_impl]
 impl ImportMappingReplacement for NextFontLocalReplacer {
     #[turbo_tasks::function]
-    fn replace(&self, _capture: String) -> Vc<ImportMapping> {
+    fn replace(&self, _capture: Arc<String>) -> Vc<ImportMapping> {
         ImportMapping::Ignore.into()
     }
 
@@ -139,7 +144,7 @@ impl ImportMappingReplacement for NextFontLocalReplacer {
 
         let this = &*self.await?;
         if can_use_next_font(this.project_path, *query_vc).await? {
-            Ok(self.import_map_result(context, query_vc.await?.to_string()))
+            Ok(self.import_map_result(context, query_vc.await?.to_string().into()))
         } else {
             Ok(ImportMapResult::NoEntry.into())
         }
@@ -159,16 +164,19 @@ impl NextFontLocalCssModuleReplacer {
     #[turbo_tasks::function]
     async fn import_map_result(
         context: Vc<FileSystemPath>,
-        query: String,
+        query: Arc<String>,
     ) -> Result<Vc<ImportMapResult>> {
         let request_hash = get_request_hash(&query).await?;
-        let query_vc = Vc::cell(query);
+        let query_vc = Vc::cell((*query).clone());
 
         let options = font_options_from_query_map(query_vc);
-        let css_virtual_path = context.join(format!(
-            "/{}.module.css",
-            get_request_id(options.font_family(), request_hash).await?
-        ));
+        let css_virtual_path = context.join(
+            format!(
+                "/{}.module.css",
+                get_request_id(options.font_family(), request_hash).await?
+            )
+            .into(),
+        );
         let fallback = get_font_fallbacks(context, options, request_hash);
 
         let stylesheet = build_stylesheet(
@@ -191,7 +199,7 @@ impl NextFontLocalCssModuleReplacer {
 #[turbo_tasks::value_impl]
 impl ImportMappingReplacement for NextFontLocalCssModuleReplacer {
     #[turbo_tasks::function]
-    fn replace(&self, _capture: String) -> Vc<ImportMapping> {
+    fn replace(&self, _capture: Arc<String>) -> Vc<ImportMapping> {
         ImportMapping::Ignore.into()
     }
 
@@ -217,7 +225,7 @@ impl ImportMappingReplacement for NextFontLocalCssModuleReplacer {
 
         Ok(Self::import_map_result(
             context,
-            query_vc.await?.to_string(),
+            query_vc.await?.to_string().into(),
         ))
     }
 }
@@ -245,7 +253,7 @@ impl NextFontLocalFontFileReplacer {
 #[turbo_tasks::value_impl]
 impl ImportMappingReplacement for NextFontLocalFontFileReplacer {
     #[turbo_tasks::function]
-    fn replace(&self, _capture: String) -> Vc<ImportMapping> {
+    fn replace(&self, _capture: Arc<String>) -> Vc<ImportMapping> {
         ImportMapping::Ignore.into()
     }
 
@@ -286,9 +294,9 @@ impl ImportMappingReplacement for NextFontLocalFontFileReplacer {
             name.push_str(".p")
         }
 
-        let font_virtual_path = context.join(format!("/{}.{}", name, ext));
+        let font_virtual_path = context.join(format!("/{}.{}", name, ext).into());
 
-        let font_file = context.join(path.clone()).read();
+        let font_file = context.join(path.clone().into()).read();
 
         let font_source = VirtualSource::new(font_virtual_path, AssetContent::file(font_file));
 
