@@ -161,6 +161,7 @@ export interface RenderOptsPartial {
     ppr: boolean
     missingSuspenseWithCSRBailout: boolean
     swrDelta: SwrDelta | undefined
+    clientTraceMetadata: boolean
   }
   postponed?: string
   /**

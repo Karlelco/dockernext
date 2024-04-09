@@ -1,3 +1,4 @@
+import type { TextMapSetter } from '@opentelemetry/api'
 import type { SpanTypes } from './constants'
 import { LogSpanAllowList, NextVanillaSpanAllowlist } from './constants'
 
@@ -136,6 +137,12 @@ interface NextTracer {
    * Returns undefined otherwise.
    */
   getActiveScopeSpan(): Span | undefined
+
+  /**
+   * Returns trace propagation data for the currently active context. The format is equal to data provided
+   * through the OpenTelemetry propagator API.
+   */
+  getTracePropagationData(): ClientTraceDataEntry[]
 }
 
 type NextAttributeNames =
@@ -158,6 +165,20 @@ const rootSpanIdKey = api.createContextKey('next.rootSpanId')
 let lastSpanId = 0
 const getSpanId = () => lastSpanId++
 
+export interface ClientTraceDataEntry {
+  key: string
+  value: string
+}
+
+const clientTraceDataSetter: TextMapSetter<ClientTraceDataEntry[]> = {
+  set(carrier, key, value) {
+    carrier.push({
+      key,
+      value,
+    })
+  },
+}
+
 class NextTracerImpl implements NextTracer {
   /**
    * Returns an instance to the trace with configured name.
@@ -170,6 +191,13 @@ class NextTracerImpl implements NextTracer {
 
   public getContext(): ContextAPI {
     return context
+  }
+
+  public getTracePropagationData(): ClientTraceDataEntry[] {
+    const activeContext = context.active()
+    const entries: ClientTraceDataEntry[] = []
+    propagation.inject(activeContext, entries, clientTraceDataSetter)
+    return entries
   }
 
   public getActiveScopeSpan(): Span | undefined {

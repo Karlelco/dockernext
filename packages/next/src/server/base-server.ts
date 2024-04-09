@@ -523,6 +523,8 @@ export default abstract class Server<ServerOptions extends Options = Options> {
         missingSuspenseWithCSRBailout:
           this.nextConfig.experimental.missingSuspenseWithCSRBailout === true,
         swrDelta: this.nextConfig.experimental.swrDelta,
+        clientTraceMetadata:
+          this.nextConfig.experimental.clientTraceMetadata === true,
       },
     }
 
