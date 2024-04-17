@@ -231,6 +231,39 @@ async function createForwardedActionResponse(
   }
 }
 
+/**
+ * Returns the parsed redirect URL if we deem that it is hosted by us.
+ *
+ * We handle both relative and absolute redirect URLs.
+ *
+ * In case the redirect URL is not relative to the application we return `null`.
+ */
+function getAppRelativeRedirectUrl(
+  basePath: string,
+  host: Host,
+  redirectUrl: string
+): URL | null {
+  if (!host) {
+    return null
+  }
+
+  const parsedRedirectUrl = new URL(redirectUrl, 'http://n')
+
+  if (redirectUrl.startsWith('/')) {
+    return parsedRedirectUrl
+  }
+
+  if (host.value !== parsedRedirectUrl.host) {
+    return null
+  }
+
+  // At this point the hosts are the same, just confirm we
+  // are routing to a path underneath the `basePath`
+  return parsedRedirectUrl.pathname.startsWith(basePath)
+    ? parsedRedirectUrl
+    : null
+}
+
 async function createRedirectRenderResult(
   req: BaseNextRequest,
   res: BaseNextResponse,
@@ -246,12 +279,13 @@ async function createRedirectRenderResult(
   // we can save an extra roundtrip and avoid a full page reload.
   // When the redirect URL starts with a `/`, or to the same host as application,
   // we treat it as an app-relative redirect.
-  const parsedRedirectUrl = new URL(redirectUrl, 'http://n')
-  const isAppRelativeRedirect =
-    redirectUrl.startsWith('/') ||
-    (originalHost && originalHost.value === parsedRedirectUrl.host)
+  const appRelativeRedirectUrl = getAppRelativeRedirectUrl(
+    basePath,
+    originalHost,
+    redirectUrl
+  )
 
-  if (isAppRelativeRedirect) {
+  if (appRelativeRedirectUrl) {
     if (!originalHost) {
       throw new Error(
         'Invariant: Missing `host` header from a forwarded Server Actions request.'
@@ -270,7 +304,7 @@ async function createRedirectRenderResult(
       process.env.__NEXT_PRIVATE_ORIGIN || `${proto}://${originalHost.value}`
 
     const fetchUrl = new URL(
-      `${origin}${basePath}${parsedRedirectUrl.pathname}${parsedRedirectUrl.search}`
+      `${origin}${basePath}${appRelativeRedirectUrl.pathname}${appRelativeRedirectUrl.search}`
     )
 
     if (staticGenerationStore.revalidatedTags) {
