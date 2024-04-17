@@ -110,6 +110,7 @@ import {
 import { createServerModuleMap } from './action-utils'
 import { isNodeNextRequest } from '../base-http/helpers'
 import AppRouter from '../../client/components/app-router'
+import { createInitialRouterState } from '../../client/components/router-reducer/create-initial-router-state'
 
 export type GetDynamicParamFromSegment = (
   // [slug] / [[slug]] / [...slug]
@@ -582,6 +583,7 @@ function ReactServerEntrypoint<T>({
     b: buildId,
     p: assetPrefix,
     c: initialCanonicalUrl,
+    i: couldBeIntercepted,
     s: initialStyles,
     t: initialTree,
     d: initialSeedData,
@@ -589,18 +591,28 @@ function ReactServerEntrypoint<T>({
     G: GlobalError,
   } = response
 
+  const initialRouterState = createInitialRouterState({
+    buildId,
+    initialSeedData,
+    initialCanonicalUrl,
+    initialTree,
+    initialParallelRoutes: null!,
+    location: null,
+    initialHead,
+    couldBeIntercepted,
+  })
+
+  const noop = () => {}
+
   return (
     <>
       {initialStyles}
       <AppRouter
+        reducerState={initialRouterState}
         buildId={buildId}
+        dispatch={noop}
+        sync={noop}
         assetPrefix={assetPrefix}
-        initialCanonicalUrl={initialCanonicalUrl}
-        // This is the router state tree.
-        initialTree={initialTree}
-        // This is the tree of React nodes that are seeded into the cache
-        initialSeedData={initialSeedData}
-        initialHead={initialHead}
         globalErrorComponent={GlobalError}
       />
     </>
