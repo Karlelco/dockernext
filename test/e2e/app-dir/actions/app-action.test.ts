@@ -776,6 +776,10 @@ createNextDescribe(
           await browser.elementById(`redirect-${redirectType}`).click()
           await check(() => browser.url(), /\/redirect-target/)
 
+          expect(await browser.waitForElementByCss('#redirected').text()).toBe(
+            'redirected'
+          )
+
           // no other requests should be made
           expect(requests).toHaveLength(1)
           expect(responses).toHaveLength(1)
@@ -853,10 +857,7 @@ createNextDescribe(
           browser.on('request', (req: Request) => {
             const url = req.url()
 
-            if (
-              url.includes(initialPagePath) ||
-              url.includes(destinationPagePath)
-            ) {
+            if (!url.includes('_next')) {
               requests.push(req)
             }
           })
@@ -864,16 +865,17 @@ createNextDescribe(
           browser.on('response', (res: Response) => {
             const url = res.url()
 
-            if (
-              url.includes(initialPagePath) ||
-              url.includes(destinationPagePath)
-            ) {
+            if (!url.includes('_next')) {
               responses.push(res)
             }
           })
 
           await browser.elementById(`redirect-${redirectType}`).click()
           await check(() => browser.url(), `${next.url}${destinationPagePath}`)
+
+          expect(await browser.waitForElementByCss('#redirected').text()).toBe(
+            'redirected'
+          )
 
           // no other requests should be made
           expect(requests).toHaveLength(1)
