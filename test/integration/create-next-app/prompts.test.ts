@@ -1,6 +1,11 @@
 import { join } from 'path'
 import { check } from 'next-test-utils'
-import { createNextApp, projectFilesShouldExist, useTempDir } from './utils'
+import {
+  createNextApp,
+  projectFilesShouldExist,
+  projectFilesShouldNotExist,
+  useTempDir,
+} from './utils'
 
 let testVersion
 beforeAll(async () => {
@@ -152,7 +157,10 @@ describe('create-next-app prompts', () => {
         // cursor forward, choose 'Yes' for custom import alias
         childProcess.stdin.write('\u001b[C\n')
         // used check here since it needs to wait for the prompt
-        await check(() => output, /What import alias would you like configured/)
+        await check(
+          () => output,
+          /How would you like to configure the import alias/
+        )
         childProcess.stdin.write('@/something/*\n')
       })
 
@@ -164,6 +172,189 @@ describe('create-next-app prompts', () => {
           ],
         }
       `)
+    })
+  })
+
+  it('should warn if asterisk is present in import alias', async () => {
+    await useTempDir(async (cwd) => {
+      const projectName = 'invalid-import-alias-asterisk-double-quote'
+      const childProcess = createNextApp(
+        [
+          projectName,
+          '--ts',
+          '--app',
+          '--no-eslint',
+          '--no-tailwind',
+          '--no-src-dir',
+          '--import-alias=asterisk*/*',
+          '--dry-run',
+        ],
+        {
+          cwd,
+        },
+        testVersion
+      )
+
+      await new Promise<void>(async (resolve) => {
+        let output = ''
+        childProcess.stderr.on('data', (data) => {
+          output += data
+          process.stderr.write(data)
+        })
+        await check(() => output, /import alias cannot include asterisk/)
+        // show current
+        await check(() => output, /Current: asterisk/)
+        // force exit
+        childProcess.kill()
+        resolve()
+      })
+    })
+  })
+
+  it('should warn if double quote is present in import alias', async () => {
+    await useTempDir(async (cwd) => {
+      const projectName = 'invalid-import-alias-asterisk-double-quote'
+      const childProcess = createNextApp(
+        [
+          projectName,
+          '--ts',
+          '--app',
+          '--no-eslint',
+          '--no-tailwind',
+          '--no-src-dir',
+          '--import-alias=double"quote/*',
+          '--dry-run',
+        ],
+        {
+          cwd,
+        },
+        testVersion
+      )
+
+      await new Promise<void>(async (resolve) => {
+        let output = ''
+        childProcess.stderr.on('data', (data) => {
+          output += data
+          process.stderr.write(data)
+        })
+        await check(() => output, /or double quote/)
+        // show current
+        await check(() => output, /Current: double"quote/)
+        // force exit
+        childProcess.kill()
+        resolve()
+      })
+    })
+  })
+
+  it('should warn if invalid pattern in import alias', async () => {
+    await useTempDir(async (cwd) => {
+      const projectName = 'invalid-import-alias'
+      const childProcess = createNextApp(
+        [
+          projectName,
+          '--ts',
+          '--app',
+          '--no-eslint',
+          '--no-tailwind',
+          '--no-src-dir',
+          '--import-alias=invalid',
+          '--dry-run',
+        ],
+        {
+          cwd,
+        },
+        testVersion
+      )
+
+      await new Promise<void>(async (resolve) => {
+        let output = ''
+        childProcess.stderr.on('data', (data) => {
+          output += data
+          process.stderr.write(data)
+        })
+        await check(() => output, /import alias must follow the pattern/)
+        // show current
+        await check(() => output, /Current: invalid/)
+        // force exit
+        childProcess.kill()
+        resolve()
+      })
+    })
+  })
+
+  it('should prompt user to confirm reset preferences', async () => {
+    await useTempDir(async (cwd) => {
+      const childProcess = createNextApp(
+        ['--reset'],
+        {
+          cwd,
+        },
+        testVersion
+      )
+
+      await new Promise<void>(async (resolve) => {
+        childProcess.on('exit', async (exitCode) => {
+          expect(exitCode).toBe(0)
+          resolve()
+        })
+        let output = ''
+        childProcess.stdout.on('data', (data) => {
+          output += data
+          process.stdout.write(data)
+        })
+        await check(
+          () => output,
+          /Would you like to reset the saved preferences/
+        )
+        // cursor forward, choose 'Yes' for reset preferences
+        childProcess.stdin.write('\u001b[C\n')
+        await check(
+          () => output,
+          /The preferences have been reset successfully/
+        )
+      })
+    })
+  })
+
+  it('should not create app if --dry-run', async () => {
+    const projectName = 'dry-run'
+    await useTempDir(async (cwd) => {
+      const childProcess = createNextApp(
+        [
+          '--ts',
+          '--app',
+          '--eslint',
+          '--no-src-dir',
+          '--no-tailwind',
+          '--no-import-alias',
+          '--dry-run',
+        ],
+        {
+          cwd,
+        },
+        testVersion
+      )
+      await new Promise<void>(async (resolve) => {
+        childProcess.on('exit', async (exitCode) => {
+          expect(exitCode).toBe(0)
+          projectFilesShouldNotExist({
+            cwd,
+            projectName,
+            files: ['package.json'],
+          })
+          resolve()
+        })
+        let output = ''
+        childProcess.stdout.on('data', (data) => {
+          output += data
+          process.stdout.write(data)
+        })
+        await check(() => output, /Running a dry run, skipping installation/)
+
+        // enter project name
+        childProcess.stdin.write(`${projectName}\n`)
+      })
     })
   })
 })
