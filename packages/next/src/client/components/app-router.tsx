@@ -135,7 +135,7 @@ type AppRouterProps = Omit<
   buildId: string
   initialHead: ReactNode
   assetPrefix: string
-  missingSlots: Set<string>
+  missingSlots?: Set<string>
 }
 
 function isExternalURL(url: URL) {
@@ -667,9 +667,13 @@ function Router({
         require('./dev-root-not-found-boundary').DevRootNotFoundBoundary
       content = (
         <DevRootNotFoundBoundary>
-          <MissingSlotContext.Provider value={missingSlots}>
-            {content}
-          </MissingSlotContext.Provider>
+          {missingSlots ? (
+            <MissingSlotContext.Provider value={missingSlots}>
+              {content}
+            </MissingSlotContext.Provider>
+          ) : (
+            content
+          )}
         </DevRootNotFoundBoundary>
       )
     }
