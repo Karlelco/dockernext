@@ -4,12 +4,26 @@ import { nextTestSetup } from 'e2e-utils'
 import { readdir, readFile } from 'fs-extra'
 import { join } from 'path'
 
-describe('SCSS Support', () => {
+const nextConfig = {
+  productionBrowserSourceMaps: true,
+}
+
+describe.each([
+  { dependencies: { sass: '1.54.0' }, nextConfig },
+  {
+    dependencies: { 'sass-embedded': '1.75.0' },
+    nextConfig: {
+      ...nextConfig,
+      sassOptions: {
+        implementation: 'sass-embedded',
+      },
+    },
+  },
+])('SCSS Support ($dependencies)', ({ dependencies, nextConfig }) => {
   const { next, isNextDev } = nextTestSetup({
     files: __dirname,
-    dependencies: {
-      sass: '1.54.0',
-    },
+    dependencies,
+    nextConfig,
   })
 
   // TODO: Figure out this test for dev and Turbopack
@@ -19,6 +33,7 @@ describe('SCSS Support', () => {
         const cssFolder = join(next.testDir, '.next/static/css')
 
         const files = await readdir(cssFolder)
+
         const cssFiles = files.filter((f) => /\.css$/.test(f))
 
         expect(cssFiles.length).toBe(1)
