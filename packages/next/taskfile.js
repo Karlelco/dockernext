@@ -2572,7 +2572,13 @@ export async function trace(task, opts) {
 
 export async function build(task, opts) {
   await task.serial(
-    ['precompile', 'compile', 'generate_types', 'rewrite_compiled_references'],
+    [
+      'clear_dist',
+      'precompile',
+      'compile',
+      'generate_types',
+      'rewrite_compiled_references',
+    ],
     opts
   )
 }
@@ -2614,9 +2620,12 @@ export async function rewrite_compiled_references(task, opts) {
   }
 }
 
-export default async function (task) {
-  const opts = { dev: true }
+export async function clear_dist(task) {
   await task.clear('dist')
+}
+
+export default async function dev(task) {
+  const opts = { dev: true }
   await task.start('build', opts)
   await task.watch('src/bin', 'bin', opts)
   await task.watch('src/pages', 'pages', opts)
@@ -2705,10 +2714,6 @@ export async function experimental_testmode(task, opts) {
     .source('src/experimental/testmode/**/!(*.test).+(js|ts|tsx)')
     .swc('server', {})
     .target('dist/experimental/testmode')
-}
-
-export async function release(task) {
-  await task.clear('dist').start('build')
 }
 
 export async function next_bundle_app_turbo(task, opts) {
