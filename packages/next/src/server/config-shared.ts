@@ -381,6 +381,11 @@ export interface ExperimentalConfig {
   instrumentationHook?: boolean
 
   /**
+   * Enables the propagation of trace data through meta tags to the client.
+   */
+  clientTraceMetadata?: boolean
+
+  /**
    * Using this feature will enable the `react@experimental` for the `app` directory.
    */
   ppr?: ExperimentalPPRConfig
@@ -942,6 +947,7 @@ export const defaultConfig: NextConfig = {
     turbotrace: undefined,
     typedRoutes: false,
     instrumentationHook: false,
+    clientTraceMetadata: false,
     bundlePagesExternals: false,
     parallelServerCompiles: false,
     parallelServerBuildTraces: false,

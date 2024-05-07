@@ -427,6 +427,7 @@ export async function exportAppImpl(
       missingSuspenseWithCSRBailout:
         nextConfig.experimental.missingSuspenseWithCSRBailout === true,
       swrDelta: nextConfig.experimental.swrDelta,
+      clientTraceMetadata: nextConfig.experimental.clientTraceMetadata === true,
     },
   }
 
