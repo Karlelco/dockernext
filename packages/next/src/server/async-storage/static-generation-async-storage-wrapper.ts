@@ -15,8 +15,11 @@ export type StaticGenerationContext = {
     isOnDemandRevalidate?: boolean
     fetchCache?: StaticGenerationStore['fetchCache']
     isServerAction?: boolean
-    waitUntil?: Promise<any>
-    experimental?: Pick<RenderOptsPartial['experimental'], 'isRoutePPREnabled'>
+    pendingWaitUntil?: Promise<any>
+    experimental: Pick<
+      RenderOptsPartial['experimental'],
+      'isRoutePPREnabled' | 'after'
+    >
 
     /**
      * Fetch metrics attached in patch-fetch.ts

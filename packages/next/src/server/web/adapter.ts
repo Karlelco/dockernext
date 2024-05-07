@@ -204,6 +204,14 @@ export async function adapter(
   let response
   let cookiesFromResponse
 
+  const requestClosedTarget = new EventTarget()
+  const onRequestClose = (callback: () => void) => {
+    requestClosedTarget.addEventListener('close', callback)
+  }
+  const emitRequestClose = () => {
+    requestClosedTarget.dispatchEvent(new Event('close'))
+  }
+
   response = await propagator(request, () => {
     // we only care to make async storage available for middleware
     const isMiddleware =
@@ -227,12 +235,15 @@ export async function adapter(
                 onUpdateCookies: (cookies) => {
                   cookiesFromResponse = cookies
                 },
-                // @ts-expect-error: TODO: investigate why previewProps isn't on RenderOpts
                 previewProps: prerenderManifest?.preview || {
                   previewModeId: 'development-id',
                   previewModeEncryptionKey: '',
                   previewModeSigningKey: '',
                 },
+                waitUntil: event.waitUntil.bind(event),
+                onClose: onRequestClose,
+                // @ts-expect-error TODO(after): not sure what to do about this
+                experimental: params.request.nextConfig?.experimental,
               },
             },
             () => params.handler(request, event)
@@ -246,6 +257,8 @@ export async function adapter(
   if (response && !(response instanceof Response)) {
     throw new TypeError('Expected an instance of Response to be returned')
   }
+
+  emitRequestClose()
 
   if (response && cookiesFromResponse) {
     response.headers.set('set-cookie', cookiesFromResponse)

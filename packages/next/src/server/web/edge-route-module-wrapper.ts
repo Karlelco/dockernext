@@ -104,6 +104,10 @@ export class EdgeRouteModuleWrapper {
       },
       renderOpts: {
         supportsDynamicHTML: true,
+        experimental: {
+          // @ts-expect-error TODO(after): not sure what to do about this
+          after: undefined,
+        },
       },
     }
 
@@ -111,8 +115,8 @@ export class EdgeRouteModuleWrapper {
     const res = await this.routeModule.handle(request, context)
 
     const waitUntilPromises = [internal_getCurrentFunctionWaitUntil()]
-    if (context.renderOpts.waitUntil) {
-      waitUntilPromises.push(context.renderOpts.waitUntil)
+    if (context.renderOpts.pendingWaitUntil) {
+      waitUntilPromises.push(context.renderOpts.pendingWaitUntil)
     }
     evt.waitUntil(Promise.all(waitUntilPromises))
 

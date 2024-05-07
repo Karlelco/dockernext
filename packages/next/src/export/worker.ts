@@ -248,7 +248,8 @@ async function exportPageImpl(
         incrementalCache,
         distDir,
         htmlFilepath,
-        fileWriter
+        fileWriter,
+        input.renderOpts.experimental
       )
     }
 
@@ -273,6 +274,13 @@ async function exportPageImpl(
       experimental: {
         ...input.renderOpts.experimental,
         isRoutePPREnabled,
+      },
+      // @ts-expect-error TODO(after): fix the typing here
+      waitUntil: function noWaitUntilInPrerender() {
+        throw new Error('waitUntil cannot be called during prerendering.')
+      },
+      onClose: function noOnCloseInPrerender() {
+        throw new Error('onClose cannot be called during prerendering.')
       },
     }
 
