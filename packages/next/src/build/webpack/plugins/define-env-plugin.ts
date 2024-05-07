@@ -165,6 +165,8 @@ export function getDefineEnv({
       : isNodeServer
       ? 'nodejs'
       : '',
+    'process.env.EXPERIMENTAL_NODE_STREAMS_SUPPORT':
+      process.env.EXPERIMENTAL_NODE_STREAMS_SUPPORT === '1' ? '1' : '',
     'process.env.NEXT_MINIMAL': '',
     'process.env.__NEXT_PPR': checkIsAppPPREnabled(config.experimental.ppr),
     'process.env.NEXT_DEPLOYMENT_ID': config.deploymentId || false,

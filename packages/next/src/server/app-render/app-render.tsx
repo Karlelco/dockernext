@@ -33,7 +33,7 @@ import {
   continueStaticPrerender,
   continueDynamicHTMLResume,
   continueDynamicDataResume,
-} from '../stream-utils/node-web-streams-helper'
+} from '../stream-utils'
 import { canSegmentBeOverridden } from '../../client/components/match-segments'
 import { stripInternalQueries } from '../internal-utils'
 import {
@@ -109,6 +109,7 @@ import {
 } from '../client-component-renderer-logger'
 import { createServerModuleMap } from './action-utils'
 import { isNodeNextRequest } from '../base-http/helpers'
+import { HeadersAdapter } from '../web/spec-extension/adapters/headers'
 import { parseParameter } from '../../shared/lib/router/utils/route-regex'
 
 export type GetDynamicParamFromSegment = (
@@ -979,8 +980,8 @@ async function renderToHTMLOrFlightImpl(
         // output and so moving from tag to header for preloading can only
         // server to alter preloading priorities in unwanted ways
         (!isStaticGeneration && !isResume)
-          ? (headers: Headers) => {
-              headers.forEach((value, key) => {
+          ? (headers: Headers | HeadersDescriptor) => {
+              HeadersAdapter.from(headers).forEach((value, key) => {
                 setHeader(key, value)
               })
             }
@@ -1014,6 +1015,19 @@ async function renderToHTMLOrFlightImpl(
 
       try {
         let { stream, postponed, resumed } = await renderer.render(children)
+
+        if (
+          process.env.NEXT_RUNTIME === 'nodejs' &&
+          !(stream instanceof ReadableStream)
+        ) {
+          const { Readable } = await import('node:stream')
+          stream = Readable.toWeb(stream) as ReadableStream<Uint8Array>
+        }
+
+        // TODO (@Ethan-Arrowood): Remove this when stream utilities support both stream types.
+        if (!(stream instanceof ReadableStream)) {
+          throw new Error("Invariant: stream isn't a ReadableStream")
+        }
 
         const prerenderState = staticGenerationStore.prerenderState
         if (prerenderState) {
@@ -1136,6 +1150,12 @@ async function renderToHTMLOrFlightImpl(
                 const { stream: resumeStream } = await resumeRenderer.render(
                   resumeChildren
                 )
+
+                // FIXME: shouldn't need this when chainStreams supports ReadableStream | Readable
+                if (!(resumeStream instanceof ReadableStream)) {
+                  throw new Error("Invariant: stream wasn't a ReadableStream")
+                }
+
                 // First we write everything from the prerender, then we write everything from the aborted resume render
                 renderedHTMLStream = chainStreams(stream, resumeStream)
               }
