@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::{bail, Result};
-use next_core::emit_client_assets;
+use next_core::emit_assets;
 use serde::{Deserialize, Serialize};
 use turbo_tasks::{
     debug::ValueDebugFormat, trace::TraceRawVcs, Completion, State, TryFlatJoinIterExt,
@@ -67,12 +67,17 @@ impl VersionedContentMap {
     pub async fn insert_output_assets(
         self: Vc<Self>,
         assets_operation: Vc<OutputAssetsOperation>,
+        node_root: Vc<FileSystemPath>,
         client_relative_path: Vc<FileSystemPath>,
         client_output_path: Vc<FileSystemPath>,
     ) -> Result<Vc<Completion>> {
         let this = self.await?;
-        let side_effects =
-            self.output_side_effects(assets_operation, client_relative_path, client_output_path);
+        let side_effects = self.output_side_effects(
+            assets_operation,
+            node_root,
+            client_relative_path,
+            client_output_path,
+        );
         let assets = *assets_operation.await?;
         this.map_op_to_side_effects
             .update_conditionally(|map| map.insert(assets, side_effects) != Some(side_effects));
@@ -83,6 +88,7 @@ impl VersionedContentMap {
     async fn output_side_effects(
         self: Vc<Self>,
         assets_operation: Vc<OutputAssetsOperation>,
+        node_root: Vc<FileSystemPath>,
         client_relative_path: Vc<FileSystemPath>,
         client_output_path: Vc<FileSystemPath>,
     ) -> Result<Vc<Completion>> {
@@ -103,8 +109,9 @@ impl VersionedContentMap {
             changed
         });
         // Make sure all written client assets are up-to-date
-        Ok(emit_client_assets(
+        Ok(emit_assets(
             assets,
+            node_root,
             client_relative_path,
             client_output_path,
         ))
